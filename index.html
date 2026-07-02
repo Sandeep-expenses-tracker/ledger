@@ -519,6 +519,9 @@ function addExpense(date, amount, description, category){
   renderAll();
 }
 function deleteExpense(id){
+  const entry = state.expenses.find(e=>e.id===id);
+  const label = entry ? `${entry.description} (${formatINR(entry.amount)})` : 'this entry';
+  if(!window.confirm(`Delete ${label}? This can't be undone.`)) return;
   state.expenses = state.expenses.filter(e=>e.id!==id);
   githubSave();
   renderAll();
