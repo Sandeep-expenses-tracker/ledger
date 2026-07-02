@@ -314,8 +314,9 @@
               <label for="fDesc">Description</label>
               <input type="text" id="fDesc" placeholder="e.g. Auto to office" required>
             </div>
-            <div class="full" style="display:flex;justify-content:flex-end;margin-top:4px;">
-              <button type="submit" class="btn">Add expense</button>
+            <div class="full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
+              <button type="button" class="btn secondary" id="cancelEditBtn" style="display:none;">Cancel</button>
+              <button type="submit" class="btn" id="submitFormBtn">Add expense</button>
             </div>
           </div>
         </form>
@@ -399,6 +400,7 @@ let fileSha = null;
 let state = { monthly_budget: settings.monthly_budget || 0, expenses: [] };
 
 let selectedDate = formatDateStr(new Date());
+let editingId = null;
 let calViewMonth = new Date(); calViewMonth.setDate(1);
 let pulseViewMonth = new Date(); pulseViewMonth.setDate(1);
 
@@ -518,6 +520,14 @@ function addExpense(date, amount, description, category){
   githubSave();
   renderAll();
 }
+function updateExpense(id, date, amount, description, category){
+  const entry = state.expenses.find(e=>e.id===id);
+  if(!entry) return;
+  entry.date = date; entry.amount = Number(amount); entry.description = description; entry.category = category;
+  state.expenses.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+  renderAll();
+}
 function deleteExpense(id){
   const entry = state.expenses.find(e=>e.id===id);
   const label = entry ? `${entry.description} (${formatINR(entry.amount)})` : 'this entry';
@@ -584,9 +594,11 @@ function renderEntries(){
       </div>
       <div class="entry-right">
         <span class="entry-amount">${formatINR(e.amount)}</span>
-        <button class="del-btn" title="Delete" data-id="${e.id}">✕</button>
+        <button class="del-btn" title="Edit" data-id="${e.id}" data-action="edit">✏️</button>
+        <button class="del-btn" title="Delete" data-id="${e.id}" data-action="delete">✕</button>
       </div>`;
-    row.querySelector('.del-btn').addEventListener('click', ()=>deleteExpense(e.id));
+    row.querySelector('[data-action="edit"]').addEventListener('click', ()=>startEdit(e.id));
+    row.querySelector('[data-action="delete"]').addEventListener('click', ()=>deleteExpense(e.id));
     list.appendChild(row);
   });
 }
@@ -709,6 +721,28 @@ function escapeHtml(s){
 }
 
 /* ---------------- Events ---------------- */
+function startEdit(id){
+  const entry = state.expenses.find(e=>e.id===id);
+  if(!entry) return;
+  editingId = id;
+  document.getElementById('fDate').value = entry.date;
+  document.getElementById('fAmount').value = entry.amount;
+  document.getElementById('fCategory').value = entry.category;
+  document.getElementById('fDesc').value = entry.description;
+  document.getElementById('submitFormBtn').textContent = 'Save changes';
+  document.getElementById('cancelEditBtn').style.display = 'inline-block';
+  document.getElementById('addForm').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function cancelEdit(){
+  editingId = null;
+  document.getElementById('addForm').reset();
+  document.getElementById('fDate').value = selectedDate;
+  document.getElementById('submitFormBtn').textContent = 'Add expense';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+}
+
+document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
+
 document.getElementById('addForm').addEventListener('submit', (e)=>{
   e.preventDefault();
   const date = document.getElementById('fDate').value;
@@ -716,9 +750,16 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
   const category = document.getElementById('fCategory').value;
   const description = document.getElementById('fDesc').value.trim();
   if(!date || !amount || !description) return;
-  addExpense(date, amount, description, category);
-  document.getElementById('fAmount').value='';
-  document.getElementById('fDesc').value='';
+
+  if(editingId){
+    updateExpense(editingId, date, amount, description, category);
+    cancelEdit();
+  }else{
+    addExpense(date, amount, description, category);
+    document.getElementById('fAmount').value='';
+    document.getElementById('fDesc').value='';
+  }
+
   selectedDate = date;
   if(parseDateStr(date).getMonth()!==calViewMonth.getMonth() || parseDateStr(date).getFullYear()!==calViewMonth.getFullYear()){
     calViewMonth = new Date(parseDateStr(date).getFullYear(), parseDateStr(date).getMonth(), 1);
