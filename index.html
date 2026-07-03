@@ -301,12 +301,21 @@
               <select id="fCategory">
                 <option>Food &amp; Dining</option>
                 <option>Groceries</option>
+                <option>Fruits &amp; Veggies</option>
+                <option>Supplements/Protein</option>
                 <option>Travel</option>
+                <option>Trips</option>
                 <option>Bills &amp; Utilities</option>
                 <option>Health &amp; Fitness</option>
+                <option>Cosmetics</option>
+                <option>Personal Care</option>
                 <option>Shopping</option>
                 <option>Entertainment</option>
+                <option>Subscriptions</option>
                 <option>Rent / Housing</option>
+                <option>EMI/Loan Repayment</option>
+                <option>Investments/Savings</option>
+                <option>Gifts &amp; Donations</option>
                 <option>Other</option>
               </select>
             </div>
@@ -391,8 +400,11 @@
 const CACHE_KEY = 'ledger_data_cache_v1';
 const SETTINGS_KEY = 'ledger_settings_v1';
 const CATEGORY_COLORS = {
-  'Food & Dining':'#D4A24C','Groceries':'#7FA6A8','Travel':'#8B93C7','Bills & Utilities':'#C4574B',
-  'Health & Fitness':'#4C9A6A','Shopping':'#B784C7','Entertainment':'#D48A5E','Rent / Housing':'#6E8FB0','Other':'#8B949E'
+  'Food & Dining':'#D4A24C','Groceries':'#7FA6A8','Fruits & Veggies':'#8FB35C','Supplements/Protein':'#5CA0B3',
+  'Travel':'#8B93C7','Trips':'#6E7FD4','Bills & Utilities':'#C4574B','Health & Fitness':'#4C9A6A','Cosmetics':'#C77FA6',
+  'Personal Care':'#D48AB0','Shopping':'#B784C7','Entertainment':'#D48A5E','Subscriptions':'#A98BC7',
+  'Rent / Housing':'#6E8FB0','EMI/Loan Repayment':'#B25C5C','Investments/Savings':'#5CA36B','Gifts & Donations':'#D4B45C',
+  'Other':'#8B949E'
 };
 
 let settings = loadSettings();
