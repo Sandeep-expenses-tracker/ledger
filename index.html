@@ -339,6 +339,37 @@
         <div id="entriesList"></div>
       </div>
 
+      <div class="card">
+        <h3>Search your history</h3>
+        <div class="form-grid">
+          <div class="full">
+            <label for="searchText">Search description</label>
+            <input type="text" id="searchText" placeholder="e.g. auto, protein, netflix">
+          </div>
+          <div>
+            <label for="searchCategory">Category</label>
+            <select id="searchCategory"><option value="">All categories</option></select>
+          </div>
+          <div></div>
+          <div>
+            <label for="searchFrom">From</label>
+            <input type="date" id="searchFrom" class="mono-input">
+          </div>
+          <div>
+            <label for="searchTo">To</label>
+            <input type="date" id="searchTo" class="mono-input">
+          </div>
+          <div class="full" style="display:flex;justify-content:flex-end;">
+            <button type="button" class="btn secondary" id="clearSearchBtn">Clear filters</button>
+          </div>
+        </div>
+        <div class="entries-head" style="margin-top:6px;">
+          <span class="date-label" id="searchResultsLabel">All entries</span>
+          <span class="day-total mono" id="searchResultsTotal">₹0</span>
+        </div>
+        <div id="searchResultsList" style="max-height:340px;overflow-y:auto;"></div>
+      </div>
+
       <div class="split-row">
         <div class="card">
           <h3>Breakdown by category — this month</h3>
@@ -593,6 +624,7 @@ function renderAll(){
   renderTotals();
   renderPulse();
   renderCategoryBreakdown();
+  renderSearch();
 }
 
 function renderTotals(){
@@ -744,6 +776,70 @@ function renderCategoryBreakdown(){
   });
 }
 
+let searchCategoryOptionsBuilt = false;
+function ensureSearchCategoryOptions(){
+  if(searchCategoryOptionsBuilt) return;
+  const sel = document.getElementById('searchCategory');
+  Object.keys(CATEGORY_COLORS).forEach(cat=>{
+    const opt = document.createElement('option');
+    opt.value = cat; opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+  searchCategoryOptionsBuilt = true;
+}
+
+function renderSearch(){
+  ensureSearchCategoryOptions();
+  const text = document.getElementById('searchText').value.trim().toLowerCase();
+  const category = document.getElementById('searchCategory').value;
+  const from = document.getElementById('searchFrom').value;
+  const to = document.getElementById('searchTo').value;
+
+  let results = state.expenses.filter(e=>{
+    if(text && !e.description.toLowerCase().includes(text)) return false;
+    if(category && e.category !== category) return false;
+    if(from && e.date < from) return false;
+    if(to && e.date > to) return false;
+    return true;
+  });
+  results.sort((a,b)=> a.date < b.date ? 1 : -1);
+
+  const anyFilter = text || category || from || to;
+  document.getElementById('searchResultsLabel').textContent = anyFilter
+    ? `${results.length} match${results.length===1?'':'es'}`
+    : 'All entries';
+  document.getElementById('searchResultsTotal').textContent = formatINR(sum(results));
+
+  const list = document.getElementById('searchResultsList');
+  list.innerHTML = '';
+  if(results.length===0){
+    list.innerHTML = '<div class="empty-state">No expenses match these filters.</div>';
+    return;
+  }
+  results.forEach(e=>{
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+    const d = parseDateStr(e.date);
+    const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short', year:'numeric'});
+    row.innerHTML = `
+      <div class="entry-left">
+        <span class="entry-desc">${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+      </div>
+      <div class="entry-right">
+        <span class="entry-amount">${formatINR(e.amount)}</span>
+        <button class="del-btn" title="Edit" data-id="${e.id}" data-action="edit">✏️</button>
+        <button class="del-btn" title="Delete" data-id="${e.id}" data-action="delete">✕</button>
+      </div>`;
+    row.querySelector('[data-action="edit"]').addEventListener('click', ()=>{
+      startEdit(e.id);
+      selectedDate = e.date;
+    });
+    row.querySelector('[data-action="delete"]').addEventListener('click', ()=>deleteExpense(e.id));
+    list.appendChild(row);
+  });
+}
+
 function escapeHtml(s){
   const div = document.createElement('div'); div.textContent = s??''; return div.innerHTML;
 }
@@ -814,6 +910,18 @@ document.getElementById('editBudgetBtn').addEventListener('click', ()=>{
   state.monthly_budgets[monthKey(year, month)] = val;
   githubSave();
   renderPulse();
+});
+
+['searchText','searchCategory','searchFrom','searchTo'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderSearch);
+  document.getElementById(id).addEventListener('change', renderSearch);
+});
+document.getElementById('clearSearchBtn').addEventListener('click', ()=>{
+  document.getElementById('searchText').value = '';
+  document.getElementById('searchCategory').value = '';
+  document.getElementById('searchFrom').value = '';
+  document.getElementById('searchTo').value = '';
+  renderSearch();
 });
 
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
