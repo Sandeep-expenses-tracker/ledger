@@ -66,7 +66,6 @@
   }
   button.icon-btn:hover{border-color:var(--accent);}
 
-  
   /* Cards */
   .card{
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
@@ -244,7 +243,7 @@
     <canvas id="pulseChart" height="55"></canvas>
     <div style="margin-top:10px;">
       <div class="budget-row">
-        <span>Monthly budget</span>
+        <span>Monthly budget <button type="button" id="editBudgetBtn" title="Set budget for this month" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0;margin-left:4px;">✏️ edit</button></span>
         <span class="val" id="budgetVal">₹0 of ₹0</span>
       </div>
       <div class="bar-track"><div class="bar-fill" id="budgetBar" style="width:0%;background:var(--good);"></div></div>
@@ -385,9 +384,10 @@
       <input type="password" id="sToken" placeholder="github_pat_...">
     </div>
     <div class="field">
-      <label for="sBudget">Monthly budget (₹)</label>
+      <label for="sBudget">Default monthly budget (₹)</label>
       <input type="number" id="sBudget" class="mono-input" min="0" step="100" placeholder="e.g. 25000">
     </div>
+    <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Used for any month you haven't set a specific budget for. To set a budget for a particular month (e.g. this month), use the ✏️ edit link next to the budget bar on the main page instead.</div>
     <div class="modal-msg" id="modalMsg"></div>
     <div class="modal-actions">
       <button class="btn" id="saveSettingsBtn">Save &amp; connect</button>
@@ -410,7 +410,7 @@ const CATEGORY_COLORS = {
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, expenses: [] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, expenses: [] };
 
 let selectedDate = formatDateStr(new Date());
 let editingId = null;
@@ -481,6 +481,7 @@ async function githubLoad(){
     const parsed = JSON.parse(decoded);
     state.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
     if(typeof parsed.monthly_budget === 'number') state.monthly_budget = parsed.monthly_budget;
+    if(parsed.monthly_budgets && typeof parsed.monthly_budgets === 'object') state.monthly_budgets = parsed.monthly_budgets;
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -571,6 +572,20 @@ function dayTotalFor(dateStr){
   return sum(expensesFor(x=>x.date===dateStr));
 }
 
+function pad2(n){ return String(n).padStart(2,'0'); }
+function monthKey(year, month){ return `${year}-${pad2(month+1)}`; }
+function budgetForMonth(year, month){
+  const key = monthKey(year, month);
+  if(state.monthly_budgets && Object.prototype.hasOwnProperty.call(state.monthly_budgets, key)){
+    return state.monthly_budgets[key];
+  }
+  if(state.monthly_budgets){
+    const priorKeys = Object.keys(state.monthly_budgets).filter(k=>k<key).sort();
+    if(priorKeys.length) return state.monthly_budgets[priorKeys[priorKeys.length-1]];
+  }
+  return state.monthly_budget || 0;
+}
+
 /* ---------------- Rendering ---------------- */
 function renderAll(){
   renderCalendar();
@@ -657,7 +672,7 @@ function renderPulse(){
   const cumulative = []; let running=0;
   dailyTotals.forEach(v=>{ running+=v; cumulative.push(running); });
   const monthTotal = running;
-  const budget = state.monthly_budget || 0;
+  const budget = budgetForMonth(year, month);
   const now = new Date();
   const isCurrentMonth = now.getFullYear()===year && now.getMonth()===month;
   const daysElapsed = isCurrentMonth ? now.getDate() : daysInMonth;
@@ -788,6 +803,19 @@ document.getElementById('calNext').addEventListener('click', ()=>{ calViewMonth.
 document.getElementById('pulsePrev').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()-1); renderPulse(); renderCategoryBreakdown(); });
 document.getElementById('pulseNext').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()+1); renderPulse(); renderCategoryBreakdown(); });
 
+document.getElementById('editBudgetBtn').addEventListener('click', ()=>{
+  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+  const current = budgetForMonth(year, month);
+  const input = window.prompt(`Set budget for ${monthLabel(pulseViewMonth)} (₹). This will also apply to future months until you change it again.`, current || '');
+  if(input === null) return;
+  const val = Number(input);
+  if(isNaN(val) || val < 0) return;
+  if(!state.monthly_budgets) state.monthly_budgets = {};
+  state.monthly_budgets[monthKey(year, month)] = val;
+  githubSave();
+  renderPulse();
+});
+
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
 document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
 document.getElementById('saveSettingsBtn').addEventListener('click', onSaveSettings);
@@ -812,18 +840,21 @@ async function onSaveSettings(){
   settings.branch = document.getElementById('sBranch').value.trim() || 'main';
   settings.path = document.getElementById('sPath').value.trim() || 'data.json';
   settings.token = document.getElementById('sToken').value.trim();
-  state.monthly_budget = Number(document.getElementById('sBudget').value) || 0;
-  settings.monthly_budget = state.monthly_budget;
+  const newDefaultBudget = Number(document.getElementById('sBudget').value) || 0;
 
   if(!settings.owner || !settings.repo || !settings.token){
     msg.textContent = 'Username, repository and token are required.';
     msg.className = 'modal-msg err';
     return;
   }
+  settings.monthly_budget = newDefaultBudget;
   saveSettingsToStorage();
   msg.textContent = 'Connecting…';
   msg.className = 'modal-msg';
   await githubLoad();
+  // githubLoad() may pull an older budget value down from GitHub — reapply what
+  // was just entered here so it isn't silently overwritten by the remote copy.
+  state.monthly_budget = newDefaultBudget;
   await githubSave();
   msg.textContent = 'Connected and synced.';
   msg.className = 'modal-msg ok';
