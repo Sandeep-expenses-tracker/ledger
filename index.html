@@ -95,6 +95,13 @@
   .figure-value.accent{color:var(--accent);}
   .figure-value.good{color:var(--good);}
   .figure-value.alert{color:var(--alert);}
+  .trend-badge{
+    display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;
+    margin-top:4px;padding:2px 7px;border-radius:999px;
+  }
+  .trend-badge.up{background:var(--alert-soft);color:var(--alert);}
+  .trend-badge.down{background:var(--good-soft);color:var(--good);}
+  .trend-badge.flat{background:var(--surface-2);color:var(--text-muted);}
   .month-nav{display:flex;align-items:center;gap:10px;color:var(--text-muted);font-size:13px;}
   .month-nav button{background:none;border:1px solid var(--border);color:var(--text);width:26px;height:26px;border-radius:6px;cursor:pointer;}
   #pulseChart{max-height:150px;}
@@ -182,6 +189,15 @@
   .cat-name{flex:1;color:var(--text-muted);}
   .cat-amt{font-family:'IBM Plex Mono',monospace;}
 
+  .cat-budget-row{padding:12px 0;border-bottom:1px solid var(--border);}
+  .cat-budget-row:last-child{border-bottom:none;}
+  .cat-budget-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:10px;}
+  .cat-budget-name{display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:0;}
+  .cat-budget-input-wrap{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+  .cat-budget-input-wrap span{color:var(--text-muted);font-size:12px;}
+  .cat-budget-input{width:90px;padding:5px 8px;font-size:12.5px;text-align:right;}
+  .cat-budget-spend{font-size:11.5px;color:var(--text-muted);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+
   /* Modal */
   .modal-backdrop{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;
@@ -221,6 +237,7 @@
     <div class="header-actions">
       <div class="sync-pill"><span class="dot" id="syncDot"></span><span id="syncText">Not configured</span></div>
       <button class="btn secondary" id="installBtn" style="display:none;padding:8px 14px;font-size:13px;">📲 Install app</button>
+      <button class="icon-btn" id="wrappedBtn" title="Year in review">🎉</button>
       <button class="icon-btn" id="backupBtn" title="Download backup JSON">⇩</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </div>
@@ -233,6 +250,7 @@
         <div>
           <div class="figure-label">Spent this month</div>
           <div class="figure-value accent mono" id="monthSpendFig">₹0</div>
+          <div class="trend-badge" id="trendBadge"></div>
         </div>
         <div>
           <div class="figure-label">Remaining of budget</div>
@@ -257,6 +275,11 @@
       </div>
       <div class="bar-track"><div class="bar-fill" id="budgetBar" style="width:0%;background:var(--good);"></div></div>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <h3>Biggest expenses — <span id="bigExpMonthLabel" class="mono">this month</span></h3>
+    <div id="bigExpenseList"></div>
   </div>
 
   <div class="layout">
@@ -389,6 +412,11 @@
           <div class="cat-list" id="catList"></div>
         </div>
       </div>
+
+      <div class="card">
+        <h3>Category budgets — <span id="catBudgetMonthLabel" class="mono">this month</span></h3>
+        <div id="catBudgetList"></div>
+      </div>
     </div>
   </div>
 
@@ -436,6 +464,22 @@
   </div>
 </div>
 
+<!-- Wrapped modal -->
+<div class="modal-backdrop" id="wrappedBackdrop">
+  <div class="modal" style="max-width:480px;">
+    <h2>Year in review</h2>
+    <div style="display:flex;align-items:center;gap:10px;margin:2px 0 16px;">
+      <button class="icon-btn" id="wrappedPrevYear" style="width:30px;height:30px;font-size:13px;">‹</button>
+      <span class="mono" id="wrappedYearLabel" style="font-size:16px;font-weight:600;">—</span>
+      <button class="icon-btn" id="wrappedNextYear" style="width:30px;height:30px;font-size:13px;">›</button>
+    </div>
+    <div id="wrappedContent"></div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="closeWrappedBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---------------- State & storage helpers ---------------- */
 const CACHE_KEY = 'ledger_data_cache_v1';
@@ -450,7 +494,7 @@ const CATEGORY_COLORS = {
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, expenses: [] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, expenses: [] };
 
 let selectedDate = formatDateStr(new Date());
 let editingId = null;
@@ -458,6 +502,7 @@ let calViewMonth = new Date(); calViewMonth.setDate(1);
 let pulseViewMonth = new Date(); pulseViewMonth.setDate(1);
 
 let pulseChart = null, catChart = null;
+let wrappedYear = new Date().getFullYear();
 
 function loadSettings(){
   try{ return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; }catch(e){ return {}; }
@@ -522,6 +567,7 @@ async function githubLoad(){
     state.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
     if(typeof parsed.monthly_budget === 'number') state.monthly_budget = parsed.monthly_budget;
     if(parsed.monthly_budgets && typeof parsed.monthly_budgets === 'object') state.monthly_budgets = parsed.monthly_budgets;
+    if(parsed.category_budgets && typeof parsed.category_budgets === 'object') state.category_budgets = parsed.category_budgets;
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -634,6 +680,8 @@ function renderAll(){
   renderPulse();
   renderCategoryBreakdown();
   renderSearch();
+  renderBigExpenses();
+  renderCategoryBudgets();
 }
 
 function renderTotals(){
@@ -721,6 +769,28 @@ function renderPulse(){
 
   document.getElementById('monthSpendFig').textContent = formatINR(monthTotal);
   document.getElementById('avgFig').textContent = formatINR(avg) + ' / day';
+
+  // Month-over-month trend
+  const prevMonthDate = new Date(year, month - 1, 1);
+  const prevTotal = monthTotalFor(formatDateStr(prevMonthDate));
+  const trendEl = document.getElementById('trendBadge');
+  if(prevTotal <= 0){
+    trendEl.textContent = '';
+    trendEl.className = 'trend-badge';
+  }else{
+    const pct = ((monthTotal - prevTotal) / prevTotal) * 100;
+    const rounded = Math.round(Math.abs(pct));
+    if(Math.abs(pct) < 1){
+      trendEl.textContent = '— flat vs last month';
+      trendEl.className = 'trend-badge flat';
+    }else if(pct > 0){
+      trendEl.textContent = `↑ ${rounded}% vs last month`;
+      trendEl.className = 'trend-badge up';
+    }else{
+      trendEl.textContent = `↓ ${rounded}% vs last month`;
+      trendEl.className = 'trend-badge down';
+    }
+  }
   const remaining = budget - monthTotal;
   const remFig = document.getElementById('remainingFig');
   remFig.textContent = formatINR(Math.abs(remaining));
@@ -849,6 +919,81 @@ function renderSearch(){
   });
 }
 
+function renderBigExpenses(){
+  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+  document.getElementById('bigExpMonthLabel').textContent = monthLabel(pulseViewMonth);
+  const inMonth = state.expenses.filter(e=>{
+    const d = parseDateStr(e.date);
+    return d.getFullYear()===year && d.getMonth()===month;
+  });
+  const top = [...inMonth].sort((a,b)=>b.amount-a.amount).slice(0,5);
+  const list = document.getElementById('bigExpenseList');
+  list.innerHTML = '';
+  if(top.length===0){
+    list.innerHTML = '<div class="empty-state">No expenses logged for this month yet.</div>';
+    return;
+  }
+  top.forEach((e,i)=>{
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+    const d = parseDateStr(e.date);
+    const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+    row.innerHTML = `
+      <div class="entry-left">
+        <span class="entry-desc">#${i+1} · ${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+      </div>
+      <div class="entry-right">
+        <span class="entry-amount">${formatINR(e.amount)}</span>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function categorySpendForMonth(category, year, month){
+  return sum(expensesFor(x=>{
+    const d = parseDateStr(x.date);
+    return x.category===category && d.getFullYear()===year && d.getMonth()===month;
+  }));
+}
+
+function renderCategoryBudgets(){
+  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+  document.getElementById('catBudgetMonthLabel').textContent = monthLabel(pulseViewMonth);
+  const list = document.getElementById('catBudgetList');
+  list.innerHTML = '';
+  Object.keys(CATEGORY_COLORS).forEach(cat=>{
+    const spend = categorySpendForMonth(cat, year, month);
+    const budget = (state.category_budgets && state.category_budgets[cat]) || 0;
+    const pct = budget > 0 ? Math.min(100, (spend / budget) * 100) : 0;
+    const barColor = budget > 0 && spend > budget ? 'var(--alert)' : (pct > 85 ? 'var(--accent)' : 'var(--good)');
+    const row = document.createElement('div');
+    row.className = 'cat-budget-row';
+    row.innerHTML = `
+      <div class="cat-budget-top">
+        <div class="cat-budget-name"><span class="cat-swatch" style="background:${CATEGORY_COLORS[cat]}"></span>${escapeHtml(cat)}</div>
+        <div class="cat-budget-input-wrap">
+          <span>₹</span>
+          <input type="number" min="0" step="100" class="mono-input cat-budget-input" data-cat="${escapeHtml(cat)}" value="${budget || ''}" placeholder="no cap">
+        </div>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
+      <div class="cat-budget-spend">${formatINR(spend)}${budget > 0 ? ' of ' + formatINR(budget) : ' spent · no budget set'}</div>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.cat-budget-input').forEach(input=>{
+    input.addEventListener('change', (e)=>{
+      const cat = e.target.getAttribute('data-cat');
+      const val = Number(e.target.value) || 0;
+      if(!state.category_budgets) state.category_budgets = {};
+      if(val > 0) state.category_budgets[cat] = val; else delete state.category_budgets[cat];
+      githubSave();
+      renderCategoryBudgets();
+    });
+  });
+}
+
 function escapeHtml(s){
   const div = document.createElement('div'); div.textContent = s??''; return div.innerHTML;
 }
@@ -905,8 +1050,8 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
 
 document.getElementById('calPrev').addEventListener('click', ()=>{ calViewMonth.setMonth(calViewMonth.getMonth()-1); renderCalendar(); });
 document.getElementById('calNext').addEventListener('click', ()=>{ calViewMonth.setMonth(calViewMonth.getMonth()+1); renderCalendar(); });
-document.getElementById('pulsePrev').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()-1); renderPulse(); renderCategoryBreakdown(); });
-document.getElementById('pulseNext').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()+1); renderPulse(); renderCategoryBreakdown(); });
+document.getElementById('pulsePrev').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()-1); renderPulse(); renderCategoryBreakdown(); renderBigExpenses(); renderCategoryBudgets(); });
+document.getElementById('pulseNext').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()+1); renderPulse(); renderCategoryBreakdown(); renderBigExpenses(); renderCategoryBudgets(); });
 
 document.getElementById('editBudgetBtn').addEventListener('click', ()=>{
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
@@ -978,6 +1123,82 @@ async function onSaveSettings(){
   renderAll();
   setTimeout(closeSettings, 700);
 }
+
+function openWrapped(){
+  wrappedYear = new Date().getFullYear();
+  renderWrapped();
+  document.getElementById('wrappedBackdrop').classList.add('show');
+}
+function closeWrapped(){ document.getElementById('wrappedBackdrop').classList.remove('show'); }
+
+function renderWrapped(){
+  document.getElementById('wrappedYearLabel').textContent = wrappedYear;
+  const yearExpenses = state.expenses.filter(e=>parseDateStr(e.date).getFullYear()===wrappedYear);
+  const content = document.getElementById('wrappedContent');
+  const total = sum(yearExpenses);
+
+  if(yearExpenses.length===0){
+    content.innerHTML = `<div class="empty-state">No expenses logged in ${wrappedYear} yet.</div>`;
+    return;
+  }
+
+  const catTotals = {};
+  yearExpenses.forEach(e=>{ catTotals[e.category] = (catTotals[e.category]||0) + Number(e.amount||0); });
+  const topCat = Object.keys(catTotals).sort((a,b)=>catTotals[b]-catTotals[a])[0];
+
+  const biggest = [...yearExpenses].sort((a,b)=>b.amount-a.amount)[0];
+
+  const monthTotals = {};
+  yearExpenses.forEach(e=>{
+    const m = parseDateStr(e.date).getMonth();
+    monthTotals[m] = (monthTotals[m]||0) + Number(e.amount||0);
+  });
+  const monthsWithData = Object.keys(monthTotals).map(Number);
+  const bestMonth = monthsWithData.reduce((best,m)=> monthTotals[m]<monthTotals[best] ? m : best, monthsWithData[0]);
+  const worstMonth = monthsWithData.reduce((worst,m)=> monthTotals[m]>monthTotals[worst] ? m : worst, monthsWithData[0]);
+  const monthName = (m)=> new Date(wrappedYear, m, 1).toLocaleDateString('en-IN',{month:'long'});
+
+  const isLeap = (wrappedYear%4===0 && wrappedYear%100!==0) || wrappedYear%400===0;
+  const daysInYear = isLeap ? 366 : 365;
+  const now = new Date();
+  const daysElapsed = wrappedYear === now.getFullYear() ? (Math.floor((now - new Date(wrappedYear,0,1))/(1000*60*60*24))+1) : daysInYear;
+  const avgDaily = total / Math.max(1, daysElapsed);
+
+  content.innerHTML = `
+    <div style="text-align:center;padding:8px 0 20px;border-bottom:1px solid var(--border);margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">Total spent in ${wrappedYear}</div>
+      <div style="font-family:'Fraunces',serif;font-size:36px;color:var(--accent);font-weight:700;margin-top:6px;">${formatINR(total)}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${yearExpenses.length} entries logged · ${formatINR(avgDaily)}/day average</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="total-card">
+        <div class="lbl">Top category</div>
+        <div class="amt mono" style="font-size:14.5px;">${escapeHtml(topCat)}</div>
+        <div class="cat-budget-spend">${formatINR(catTotals[topCat])}</div>
+      </div>
+      <div class="total-card">
+        <div class="lbl">Biggest splurge</div>
+        <div class="amt mono" style="font-size:14.5px;">${formatINR(biggest.amount)}</div>
+        <div class="cat-budget-spend">${escapeHtml(biggest.description)} · ${parseDateStr(biggest.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</div>
+      </div>
+      <div class="total-card">
+        <div class="lbl">Lightest month</div>
+        <div class="amt mono" style="font-size:14.5px;">${monthName(bestMonth)}</div>
+        <div class="cat-budget-spend">${formatINR(monthTotals[bestMonth])}</div>
+      </div>
+      <div class="total-card">
+        <div class="lbl">Heaviest month</div>
+        <div class="amt mono" style="font-size:14.5px;">${monthName(worstMonth)}</div>
+        <div class="cat-budget-spend">${formatINR(monthTotals[worstMonth])}</div>
+      </div>
+    </div>
+  `;
+}
+
+document.getElementById('wrappedBtn').addEventListener('click', openWrapped);
+document.getElementById('closeWrappedBtn').addEventListener('click', closeWrapped);
+document.getElementById('wrappedPrevYear').addEventListener('click', ()=>{ wrappedYear--; renderWrapped(); });
+document.getElementById('wrappedNextYear').addEventListener('click', ()=>{ wrappedYear++; renderWrapped(); });
 
 function downloadBackup(){
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
