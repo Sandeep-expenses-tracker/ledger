@@ -73,3 +73,31 @@ re-entering the same settings will show the same data.
 - Token scope: keep it limited to the one data repo and "Contents: Read and
   write" only — no need for broader scopes.
 - All amounts are in Indian Rupees (₹), formatted with Indian digit grouping.
+
+## Installing it as an app (PWA)
+
+The site is now an installable Progressive Web App — it can sit on your phone's
+home screen or in your desktop app dock like a native app, and the interface
+loads instantly even with no signal (your data still needs network to sync, but
+the app itself opens offline).
+
+**Files this adds**, all of which need to be uploaded to the `ledger` repo
+alongside `index.html`:
+- `manifest.json` — app name, colors, icons
+- `sw.js` — service worker that caches the app shell for offline loading
+- `icons/` folder — app icons in the sizes iOS/Android/desktop expect
+
+**To install:**
+- **Android / Chrome desktop**: open the site, click the **📲 Install app**
+  button in the header (or the install icon in Chrome's address bar) → Install.
+- **iOS Safari**: open the site → Share button → **Add to Home Screen**. iOS
+  doesn't support the automatic install prompt, so this manual step is required.
+- **Desktop (Chrome/Edge)**: same install icon appears in the address bar, or
+  use the in-app **📲 Install app** button.
+
+Once installed, it opens in its own window without browser chrome, and the
+service worker keeps the last-loaded version cached so it opens instantly even
+with the network off — your entries made offline are still saved locally and
+sync automatically next time you're online, same as using it in a regular
+browser tab.
+
