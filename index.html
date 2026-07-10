@@ -221,6 +221,20 @@
   .modal-msg.err{color:var(--alert);}
   .modal-msg.ok{color:var(--good);}
   footer.foot{margin-top:34px;text-align:center;color:var(--text-muted);font-size:12px;}
+
+  .page-nav{
+    display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:22px;
+    overflow-x:auto;
+  }
+  .nav-btn{
+    background:none;border:none;color:var(--text-muted);padding:11px 16px;font-size:13.5px;font-weight:500;
+    cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;
+    font-family:'Inter',sans-serif;transition:color .15s;
+  }
+  .nav-btn:hover{color:var(--text);}
+  .nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .page{display:none;}
+  .page.active{display:block;}
 </style>
 </head>
 <body>
@@ -243,182 +257,231 @@
     </div>
   </header>
 
-  <!-- Pulse hero -->
-  <div class="pulse-card">
-    <div class="pulse-top">
-      <div class="pulse-figures">
-        <div>
-          <div class="figure-label">Spent this month</div>
-          <div class="figure-value accent mono" id="monthSpendFig">₹0</div>
-          <div class="trend-badge" id="trendBadge"></div>
+  <nav class="page-nav">
+    <button class="nav-btn" data-page="dashboard">Dashboard</button>
+    <button class="nav-btn" data-page="add">Add expense</button>
+    <button class="nav-btn" data-page="calendar">Calendar</button>
+    <button class="nav-btn" data-page="search">Search</button>
+    <button class="nav-btn" data-page="budgets">Budgets</button>
+  </nav>
+
+  <!-- ================= DASHBOARD ================= -->
+  <section class="page" id="page-dashboard">
+
+    <div class="pulse-card">
+      <div class="pulse-top">
+        <div class="pulse-figures">
+          <div>
+            <div class="figure-label">Spent this month</div>
+            <div class="figure-value accent mono" id="monthSpendFig">₹0</div>
+            <div class="trend-badge" id="trendBadge"></div>
+          </div>
+          <div>
+            <div class="figure-label">Remaining of budget</div>
+            <div class="figure-value good mono" id="remainingFig">₹0</div>
+          </div>
+          <div>
+            <div class="figure-label">Daily average</div>
+            <div class="figure-value mono" id="avgFig">₹0</div>
+          </div>
         </div>
-        <div>
-          <div class="figure-label">Remaining of budget</div>
-          <div class="figure-value good mono" id="remainingFig">₹0</div>
-        </div>
-        <div>
-          <div class="figure-label">Daily average</div>
-          <div class="figure-value mono" id="avgFig">₹0</div>
+        <div class="month-nav">
+          <button id="pulsePrev">‹</button>
+          <span id="pulseMonthLabel" class="mono">—</span>
+          <button id="pulseNext">›</button>
         </div>
       </div>
-      <div class="month-nav">
-        <button id="pulsePrev">‹</button>
-        <span id="pulseMonthLabel" class="mono">—</span>
-        <button id="pulseNext">›</button>
+      <canvas id="pulseChart" height="55"></canvas>
+      <div style="margin-top:10px;">
+        <div class="budget-row">
+          <span>Monthly budget</span>
+          <span class="val" id="budgetVal">₹0 of ₹0</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="budgetBar" style="width:0%;background:var(--good);"></div></div>
       </div>
     </div>
-    <canvas id="pulseChart" height="55"></canvas>
-    <div style="margin-top:10px;">
-      <div class="budget-row">
-        <span>Monthly budget <button type="button" id="editBudgetBtn" title="Set budget for this month" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0;margin-left:4px;">✏️ edit</button></span>
-        <span class="val" id="budgetVal">₹0 of ₹0</span>
-      </div>
-      <div class="bar-track"><div class="bar-fill" id="budgetBar" style="width:0%;background:var(--good);"></div></div>
-    </div>
-  </div>
 
-  <div class="card" style="margin-bottom:18px;">
-    <h3>Biggest expenses — <span id="bigExpMonthLabel" class="mono">this month</span></h3>
-    <div id="bigExpenseList"></div>
-  </div>
-
-  <div class="layout">
-    <!-- Sidebar: calendar -->
-    <div>
-      <div class="card">
-        <div class="cal-head">
-          <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="calPrev">‹</button>
-          <span class="cal-title" id="calMonthLabel">—</span>
-          <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="calNext">›</button>
+    <div class="card">
+      <h3>Weekly / Monthly / Yearly</h3>
+      <div class="totals-row">
+        <div class="total-card">
+          <div class="lbl">This week</div>
+          <div class="amt mono" id="weekTotal">₹0</div>
         </div>
-        <div class="cal-grid" id="calDow"></div>
-        <div class="cal-grid" id="calGrid" style="margin-top:4px;"></div>
-      </div>
-
-      <div class="card">
-        <h3>Weekly / Monthly / Yearly</h3>
-        <div class="totals-row" style="grid-template-columns:1fr;">
-          <div class="total-card">
-            <div class="lbl">This week</div>
-            <div class="amt mono" id="weekTotal">₹0</div>
-          </div>
-          <div class="total-card">
-            <div class="lbl">This month</div>
-            <div class="amt mono" id="monthTotal">₹0</div>
-          </div>
-          <div class="total-card">
-            <div class="lbl">This year</div>
-            <div class="amt mono" id="yearTotal">₹0</div>
-          </div>
+        <div class="total-card">
+          <div class="lbl">This month</div>
+          <div class="amt mono" id="monthTotal">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">This year</div>
+          <div class="amt mono" id="yearTotal">₹0</div>
         </div>
       </div>
     </div>
 
-    <!-- Main -->
-    <div>
-      <div class="card">
-        <h3>Add an expense</h3>
-        <form id="addForm">
-          <div class="form-grid">
-            <div>
-              <label for="fDate">Date</label>
-              <input type="date" id="fDate" class="mono-input" required>
-            </div>
-            <div>
-              <label for="fAmount">Amount (₹)</label>
-              <input type="number" id="fAmount" class="mono-input" min="0" step="0.01" placeholder="0.00" required>
-            </div>
-            <div>
-              <label for="fCategory">Category</label>
-              <select id="fCategory">
-                <option>Food &amp; Dining</option>
-                <option>Groceries</option>
-                <option>Fruits &amp; Veggies</option>
-                <option>Supplements/Protein</option>
-                <option>Travel</option>
-                <option>Trips</option>
-                <option>Bills &amp; Utilities</option>
-                <option>Health &amp; Fitness</option>
-                <option>Cosmetics</option>
-                <option>Personal Care</option>
-                <option>Shopping</option>
-                <option>Entertainment</option>
-                <option>Subscriptions</option>
-                <option>Rent / Housing</option>
-                <option>EMI/Loan Repayment</option>
-                <option>Investments/Savings</option>
-                <option>Gifts &amp; Donations</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div>
-              <label for="fDesc">Description</label>
-              <input type="text" id="fDesc" placeholder="e.g. Auto to office" required>
-            </div>
-            <div class="full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
-              <button type="button" class="btn secondary" id="cancelEditBtn" style="display:none;">Cancel</button>
-              <button type="submit" class="btn" id="submitFormBtn">Add expense</button>
-            </div>
-          </div>
-        </form>
+    <div class="card">
+      <div class="entries-head">
+        <span class="date-label">Recent expenses</span>
+        <button type="button" class="btn secondary" data-nav="add" style="padding:6px 14px;font-size:12.5px;">+ Add expense</button>
       </div>
+      <div id="recentExpensesList"></div>
+    </div>
 
+    <div class="card">
+      <h3>Biggest expenses — <span id="bigExpMonthLabel" class="mono">this month</span></h3>
+      <div id="bigExpenseList"></div>
+    </div>
+
+    <div class="split-row">
       <div class="card">
-        <div class="entries-head">
-          <span class="date-label" id="entriesDateLabel">—</span>
-          <span class="day-total mono" id="entriesDayTotal">₹0</span>
-        </div>
-        <div id="entriesList"></div>
+        <h3>Breakdown by category — <span id="catBreakdownMonthLabel" class="mono">this month</span></h3>
+        <canvas id="catChart" height="200"></canvas>
       </div>
-
       <div class="card">
-        <h3>Search your history</h3>
+        <h3>Category totals</h3>
+        <div class="cat-list" id="catList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ADD EXPENSE ================= -->
+  <section class="page" id="page-add">
+    <div class="card" style="max-width:560px;margin:0 auto;">
+      <h3 id="addFormTitle">Add an expense</h3>
+      <form id="addForm">
         <div class="form-grid">
-          <div class="full">
-            <label for="searchText">Search description</label>
-            <input type="text" id="searchText" placeholder="e.g. auto, protein, netflix">
+          <div>
+            <label for="fDate">Date</label>
+            <input type="date" id="fDate" class="mono-input" required>
           </div>
           <div>
-            <label for="searchCategory">Category</label>
-            <select id="searchCategory"><option value="">All categories</option></select>
-          </div>
-          <div></div>
-          <div>
-            <label for="searchFrom">From</label>
-            <input type="date" id="searchFrom" class="mono-input">
+            <label for="fAmount">Amount (₹)</label>
+            <input type="number" id="fAmount" class="mono-input" min="0" step="0.01" placeholder="0.00" required>
           </div>
           <div>
-            <label for="searchTo">To</label>
-            <input type="date" id="searchTo" class="mono-input">
+            <label for="fCategory">Category</label>
+            <select id="fCategory">
+              <option>Food &amp; Dining</option>
+              <option>Groceries</option>
+              <option>Fruits &amp; Veggies</option>
+              <option>Supplements/Protein</option>
+              <option>Travel</option>
+              <option>Trips</option>
+              <option>Bills &amp; Utilities</option>
+              <option>Health &amp; Fitness</option>
+              <option>Cosmetics</option>
+              <option>Personal Care</option>
+              <option>Shopping</option>
+              <option>Entertainment</option>
+              <option>Subscriptions</option>
+              <option>Rent / Housing</option>
+              <option>EMI/Loan Repayment</option>
+              <option>Investments/Savings</option>
+              <option>Gifts &amp; Donations</option>
+              <option>Other</option>
+            </select>
           </div>
-          <div class="full" style="display:flex;justify-content:flex-end;">
-            <button type="button" class="btn secondary" id="clearSearchBtn">Clear filters</button>
+          <div>
+            <label for="fDesc">Description</label>
+            <input type="text" id="fDesc" placeholder="e.g. Auto to office" required>
+          </div>
+          <div class="full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
+            <button type="button" class="btn secondary" id="cancelEditBtn" style="display:none;">Cancel</button>
+            <button type="submit" class="btn" id="submitFormBtn">Add expense</button>
           </div>
         </div>
-        <div class="entries-head" style="margin-top:6px;">
-          <span class="date-label" id="searchResultsLabel">All entries</span>
-          <span class="day-total mono" id="searchResultsTotal">₹0</span>
-        </div>
-        <div id="searchResultsList" style="max-height:340px;overflow-y:auto;"></div>
-      </div>
+      </form>
+      <div class="modal-msg ok" id="addSuccessMsg" style="text-align:center;"></div>
+    </div>
+  </section>
 
-      <div class="split-row">
+  <!-- ================= CALENDAR ================= -->
+  <section class="page" id="page-calendar">
+    <div class="layout">
+      <div>
         <div class="card">
-          <h3>Breakdown by category — this month</h3>
-          <canvas id="catChart" height="200"></canvas>
-        </div>
-        <div class="card">
-          <h3>Category totals</h3>
-          <div class="cat-list" id="catList"></div>
+          <div class="cal-head">
+            <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="calPrev">‹</button>
+            <span class="cal-title" id="calMonthLabel">—</span>
+            <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="calNext">›</button>
+          </div>
+          <div class="cal-grid" id="calDow"></div>
+          <div class="cal-grid" id="calGrid" style="margin-top:4px;"></div>
         </div>
       </div>
-
-      <div class="card">
-        <h3>Category budgets — <span id="catBudgetMonthLabel" class="mono">this month</span></h3>
-        <div id="catBudgetList"></div>
+      <div>
+        <div class="card">
+          <div class="entries-head">
+            <span class="date-label" id="entriesDateLabel">—</span>
+            <span class="day-total mono" id="entriesDayTotal">₹0</span>
+          </div>
+          <div id="entriesList"></div>
+          <div style="margin-top:14px;text-align:right;">
+            <button type="button" class="btn secondary" id="addForDayBtn" style="padding:8px 14px;font-size:13px;">+ Add expense for this day</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <!-- ================= SEARCH ================= -->
+  <section class="page" id="page-search">
+    <div class="card">
+      <h3>Search your history</h3>
+      <div class="form-grid">
+        <div class="full">
+          <label for="searchText">Search description</label>
+          <input type="text" id="searchText" placeholder="e.g. auto, protein, netflix">
+        </div>
+        <div>
+          <label for="searchCategory">Category</label>
+          <select id="searchCategory"><option value="">All categories</option></select>
+        </div>
+        <div></div>
+        <div>
+          <label for="searchFrom">From</label>
+          <input type="date" id="searchFrom" class="mono-input">
+        </div>
+        <div>
+          <label for="searchTo">To</label>
+          <input type="date" id="searchTo" class="mono-input">
+        </div>
+        <div class="full" style="display:flex;justify-content:flex-end;">
+          <button type="button" class="btn secondary" id="clearSearchBtn">Clear filters</button>
+        </div>
+      </div>
+      <div class="entries-head" style="margin-top:6px;">
+        <span class="date-label" id="searchResultsLabel">All entries</span>
+        <span class="day-total mono" id="searchResultsTotal">₹0</span>
+      </div>
+      <div id="searchResultsList" style="max-height:480px;overflow-y:auto;"></div>
+    </div>
+  </section>
+
+  <!-- ================= BUDGETS ================= -->
+  <section class="page" id="page-budgets">
+    <div class="card">
+      <div class="cal-head">
+        <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="budgetsPrevMonth">‹</button>
+        <span class="cal-title mono" id="budgetsMonthLabel">—</span>
+        <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="budgetsNextMonth">›</button>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="budget-row">
+          <span>Overall monthly budget <button type="button" id="editBudgetBtn" title="Set budget for this month" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0;margin-left:4px;">✏️ edit</button></span>
+          <span class="val" id="budgetValBudgetsPage">₹0 of ₹0</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="budgetBarBudgetsPage" style="width:0%;background:var(--good);"></div></div>
+      </div>
+      <div class="sub" style="margin-top:12px;">Setting a budget here applies to the month shown above, and carries forward to future months until you change it again.</div>
+    </div>
+
+    <div class="card">
+      <h3>Category budgets</h3>
+      <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Set a cap per category — leave blank for no limit. These track against the month selected above.</div>
+      <div id="catBudgetList"></div>
+    </div>
+  </section>
 
   <footer class="foot">Data syncs to your GitHub repository · Nothing leaves your browser except direct calls to the GitHub API</footer>
 </div>
@@ -682,6 +745,7 @@ function renderAll(){
   renderSearch();
   renderBigExpenses();
   renderCategoryBudgets();
+  renderRecentExpenses();
 }
 
 function renderTotals(){
@@ -751,6 +815,8 @@ function renderCalendar(){
 
 function renderPulse(){
   document.getElementById('pulseMonthLabel').textContent = monthLabel(pulseViewMonth);
+  const budgetsLabelEl = document.getElementById('budgetsMonthLabel');
+  if(budgetsLabelEl) budgetsLabelEl.textContent = monthLabel(pulseViewMonth);
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const dailyTotals = new Array(daysInMonth).fill(0);
@@ -796,36 +862,51 @@ function renderPulse(){
   remFig.textContent = formatINR(Math.abs(remaining));
   remFig.className = 'figure-value mono ' + (remaining>=0 ? 'good' : 'alert');
 
-  document.getElementById('budgetVal').textContent = `${formatINR(monthTotal)} of ${formatINR(budget)}`;
-  const pct = budget>0 ? Math.min(100,(monthTotal/budget)*100) : 0;
+  const budgetPct = budget>0 ? Math.min(100,(monthTotal/budget)*100) : 0;
+  const barColor = monthTotal>budget && budget>0 ? 'var(--alert)' : (budgetPct>85 ? 'var(--accent)' : 'var(--good)');
+  const budgetText = `${formatINR(monthTotal)} of ${formatINR(budget)}`;
+  // Dashboard's read-only budget bar
+  document.getElementById('budgetVal').textContent = budgetText;
   const bar = document.getElementById('budgetBar');
-  bar.style.width = pct+'%';
-  bar.style.background = monthTotal>budget && budget>0 ? 'var(--alert)' : (pct>85 ? 'var(--accent)' : 'var(--good)');
+  bar.style.width = budgetPct+'%';
+  bar.style.background = barColor;
+  // Budgets page's matching (editable) budget bar
+  const barVal2 = document.getElementById('budgetValBudgetsPage');
+  const bar2 = document.getElementById('budgetBarBudgetsPage');
+  if(barVal2) barVal2.textContent = budgetText;
+  if(bar2){ bar2.style.width = budgetPct+'%'; bar2.style.background = barColor; }
 
   const labels = dailyTotals.map((_,i)=>String(i+1));
   const budgetLine = budget>0 ? dailyTotals.map((_,i)=> budget/daysInMonth*(i+1)) : [];
 
-  const ctx = document.getElementById('pulseChart').getContext('2d');
-  if(pulseChart) pulseChart.destroy();
-  pulseChart = new Chart(ctx, {
-    type:'line',
-    data:{ labels, datasets:[
-      { label:'Cumulative spend', data:cumulative, borderColor:'#D4A24C', backgroundColor:'rgba(212,162,76,0.12)', fill:true, tension:0.25, pointRadius:0, borderWidth:2 },
-      ...(budget>0 ? [{ label:'Budget pace', data:budgetLine, borderColor:'#8B949E', borderDash:[4,4], pointRadius:0, borderWidth:1.3, fill:false }] : [])
-    ]},
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> formatINR(c.parsed.y) } } },
-      scales:{
-        x:{ display:false },
-        y:{ display:false }
+  const dashboardVisible = document.getElementById('page-dashboard').classList.contains('active');
+  if(dashboardVisible){
+    const ctx = document.getElementById('pulseChart').getContext('2d');
+    if(pulseChart) pulseChart.destroy();
+    pulseChart = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[
+        { label:'Cumulative spend', data:cumulative, borderColor:'#D4A24C', backgroundColor:'rgba(212,162,76,0.12)', fill:true, tension:0.25, pointRadius:0, borderWidth:2 },
+        ...(budget>0 ? [{ label:'Budget pace', data:budgetLine, borderColor:'#8B949E', borderDash:[4,4], pointRadius:0, borderWidth:1.3, fill:false }] : [])
+      ]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> formatINR(c.parsed.y) } } },
+        scales:{
+          x:{ display:false },
+          y:{ display:false }
+        }
       }
-    }
-  });
+    });
+  }else if(pulseChart){
+    pulseChart.destroy();
+    pulseChart = null;
+  }
 }
 
 function renderCategoryBreakdown(){
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+  document.getElementById('catBreakdownMonthLabel').textContent = monthLabel(pulseViewMonth);
   const totals = {};
   state.expenses.forEach(e=>{
     const d = parseDateStr(e.date);
@@ -846,13 +927,19 @@ function renderCategoryBreakdown(){
     listEl.appendChild(row);
   });
 
-  const ctx = document.getElementById('catChart').getContext('2d');
-  if(catChart) catChart.destroy();
-  catChart = new Chart(ctx, {
-    type:'doughnut',
-    data:{ labels:cats, datasets:[{ data:cats.map(c=>totals[c]), backgroundColor:cats.map(c=>CATEGORY_COLORS[c]||'#8B949E'), borderColor:'#161B22', borderWidth:2 }] },
-    options:{ responsive:true, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> `${c.label}: ${formatINR(c.parsed)}` } } }, cutout:'68%' }
-  });
+  const dashboardVisible = document.getElementById('page-dashboard').classList.contains('active');
+  if(dashboardVisible){
+    const ctx = document.getElementById('catChart').getContext('2d');
+    if(catChart) catChart.destroy();
+    catChart = new Chart(ctx, {
+      type:'doughnut',
+      data:{ labels:cats, datasets:[{ data:cats.map(c=>totals[c]), backgroundColor:cats.map(c=>CATEGORY_COLORS[c]||'#8B949E'), borderColor:'#161B22', borderWidth:2 }] },
+      options:{ responsive:true, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> `${c.label}: ${formatINR(c.parsed)}` } } }, cutout:'68%' }
+    });
+  }else if(catChart){
+    catChart.destroy();
+    catChart = null;
+  }
 }
 
 let searchCategoryOptionsBuilt = false;
@@ -919,6 +1006,34 @@ function renderSearch(){
   });
 }
 
+function renderRecentExpenses(){
+  const list = document.getElementById('recentExpensesList');
+  const recent = [...state.expenses].sort((a,b)=>{
+    if(a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return b.id.localeCompare(a.id);
+  }).slice(0, 8);
+  list.innerHTML = '';
+  if(recent.length===0){
+    list.innerHTML = '<div class="empty-state">No expenses logged yet — add your first one to get started.</div>';
+    return;
+  }
+  recent.forEach(e=>{
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+    const d = parseDateStr(e.date);
+    const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+    row.innerHTML = `
+      <div class="entry-left">
+        <span class="entry-desc">${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+      </div>
+      <div class="entry-right">
+        <span class="entry-amount">${formatINR(e.amount)}</span>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
 function renderBigExpenses(){
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
   document.getElementById('bigExpMonthLabel').textContent = monthLabel(pulseViewMonth);
@@ -959,7 +1074,6 @@ function categorySpendForMonth(category, year, month){
 
 function renderCategoryBudgets(){
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
-  document.getElementById('catBudgetMonthLabel').textContent = monthLabel(pulseViewMonth);
   const list = document.getElementById('catBudgetList');
   list.innerHTML = '';
   Object.keys(CATEGORY_COLORS).forEach(cat=>{
@@ -998,6 +1112,43 @@ function escapeHtml(s){
   const div = document.createElement('div'); div.textContent = s??''; return div.innerHTML;
 }
 
+/* ---------------- Page routing ---------------- */
+const PAGE_IDS = ['dashboard','add','calendar','search','budgets'];
+let currentPage = 'dashboard';
+
+function applyPage(pageId){
+  if(!PAGE_IDS.includes(pageId)) pageId = 'dashboard';
+  PAGE_IDS.forEach(id=>{
+    const el = document.getElementById('page-'+id);
+    if(el) el.classList.toggle('active', id===pageId);
+  });
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.page===pageId);
+  });
+  currentPage = pageId;
+  // charts need a visible container to size themselves correctly — rebuild on show
+  if(pageId==='dashboard'){ renderPulse(); renderCategoryBreakdown(); }
+}
+function goToPage(pageId){
+  if(location.hash.replace('#','') === pageId){ applyPage(pageId); }
+  else { location.hash = pageId; }
+}
+window.addEventListener('hashchange', ()=>{ applyPage(location.hash.replace('#','')); });
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
+});
+document.querySelectorAll('[data-nav]').forEach(btn=>{
+  btn.addEventListener('click', ()=> goToPage(btn.getAttribute('data-nav')));
+});
+
+function navigateMonth(delta){
+  pulseViewMonth.setMonth(pulseViewMonth.getMonth()+delta);
+  renderPulse();
+  renderCategoryBreakdown();
+  renderBigExpenses();
+  renderCategoryBudgets();
+}
+
 /* ---------------- Events ---------------- */
 function startEdit(id){
   const entry = state.expenses.find(e=>e.id===id);
@@ -1009,7 +1160,9 @@ function startEdit(id){
   document.getElementById('fDesc').value = entry.description;
   document.getElementById('submitFormBtn').textContent = 'Save changes';
   document.getElementById('cancelEditBtn').style.display = 'inline-block';
-  document.getElementById('addForm').scrollIntoView({behavior:'smooth', block:'center'});
+  document.getElementById('addFormTitle').textContent = 'Edit expense';
+  document.getElementById('addSuccessMsg').textContent = '';
+  goToPage('add');
 }
 function cancelEdit(){
   editingId = null;
@@ -1017,9 +1170,16 @@ function cancelEdit(){
   document.getElementById('fDate').value = selectedDate;
   document.getElementById('submitFormBtn').textContent = 'Add expense';
   document.getElementById('cancelEditBtn').style.display = 'none';
+  document.getElementById('addFormTitle').textContent = 'Add an expense';
 }
 
 document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
+
+document.getElementById('addForDayBtn').addEventListener('click', ()=>{
+  cancelEdit();
+  document.getElementById('fDate').value = selectedDate;
+  goToPage('add');
+});
 
 document.getElementById('addForm').addEventListener('submit', (e)=>{
   e.preventDefault();
@@ -1029,13 +1189,13 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
   const description = document.getElementById('fDesc').value.trim();
   if(!date || !amount || !description) return;
 
-  if(editingId){
+  const wasEditing = !!editingId;
+
+  if(wasEditing){
     updateExpense(editingId, date, amount, description, category);
     cancelEdit();
   }else{
     addExpense(date, amount, description, category);
-    document.getElementById('fAmount').value='';
-    document.getElementById('fDesc').value='';
   }
 
   selectedDate = date;
@@ -1046,12 +1206,25 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
     pulseViewMonth = new Date(parseDateStr(date).getFullYear(), parseDateStr(date).getMonth(), 1);
   }
   renderAll();
+
+  if(wasEditing){
+    goToPage('calendar');
+  }else{
+    const msg = document.getElementById('addSuccessMsg');
+    msg.textContent = `✓ Added ${formatINR(amount)} · ${description}`;
+    document.getElementById('fAmount').value='';
+    document.getElementById('fDesc').value='';
+    document.getElementById('fAmount').focus();
+    setTimeout(()=>{ if(msg.textContent.startsWith('✓ Added')) msg.textContent=''; }, 4000);
+  }
 });
 
 document.getElementById('calPrev').addEventListener('click', ()=>{ calViewMonth.setMonth(calViewMonth.getMonth()-1); renderCalendar(); });
 document.getElementById('calNext').addEventListener('click', ()=>{ calViewMonth.setMonth(calViewMonth.getMonth()+1); renderCalendar(); });
-document.getElementById('pulsePrev').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()-1); renderPulse(); renderCategoryBreakdown(); renderBigExpenses(); renderCategoryBudgets(); });
-document.getElementById('pulseNext').addEventListener('click', ()=>{ pulseViewMonth.setMonth(pulseViewMonth.getMonth()+1); renderPulse(); renderCategoryBreakdown(); renderBigExpenses(); renderCategoryBudgets(); });
+document.getElementById('pulsePrev').addEventListener('click', ()=> navigateMonth(-1));
+document.getElementById('pulseNext').addEventListener('click', ()=> navigateMonth(1));
+document.getElementById('budgetsPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
+document.getElementById('budgetsNextMonth').addEventListener('click', ()=> navigateMonth(1));
 
 document.getElementById('editBudgetBtn').addEventListener('click', ()=>{
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
@@ -1243,6 +1416,7 @@ async function init(){
     setSyncStatus('', 'Not configured');
   }
   renderAll();
+  applyPage(location.hash.replace('#','') || 'dashboard');
 }
 init();
 </script>
