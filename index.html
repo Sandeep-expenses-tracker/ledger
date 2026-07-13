@@ -47,10 +47,10 @@
     --radius-sm:8px;
   }
   :root[data-theme="light"]{
-    --bg:#F7F7F8;
+    --bg:#FFFFFF;
     --surface:#FFFFFF;
-    --surface-2:#F0F0F3;
-    --border:#E3E3E7;
+    --surface-2:#F6F6F8;
+    --border:#E5E5E9;
     --text:#1A1A1E;
     --text-muted:#71717A;
     --accent:#B8863E;
@@ -113,6 +113,13 @@
   }
   .card + .card{margin-top:18px;}
   .card h3{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-family:'Inter',sans-serif;font-weight:600;margin-bottom:14px;}
+  :root[data-theme="light"] .card,
+  :root[data-theme="light"] .pulse-card,
+  :root[data-theme="light"] .modal,
+  :root[data-theme="light"] header.top .sync-pill,
+  :root[data-theme="light"] .total-card{
+    box-shadow:0 1px 2px rgba(20,20,30,0.05), 0 1px 8px rgba(20,20,30,0.04);
+  }
 
   /* Pulse hero */
   .pulse-card{
