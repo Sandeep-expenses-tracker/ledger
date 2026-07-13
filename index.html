@@ -3,6 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark light">
+<script>
+(function(){
+  try{
+    var saved = localStorage.getItem('ledger_theme_v1');
+    var theme = (saved === 'light' || saved === 'dark') ? saved
+      : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+  }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+})();
+</script>
 <title>Ledger — Daily Expense Tracker</title>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
@@ -30,8 +42,24 @@
     --good-soft:rgba(76,154,106,0.14);
     --alert:#C4574B;
     --alert-soft:rgba(196,87,75,0.14);
+    --chart-fill:rgba(212,162,76,0.12);
     --radius:12px;
     --radius-sm:8px;
+  }
+  :root[data-theme="light"]{
+    --bg:#F6F2EA;
+    --surface:#FFFFFF;
+    --surface-2:#EFE9DB;
+    --border:#DED5C2;
+    --text:#241F17;
+    --text-muted:#6E6656;
+    --accent:#A8752E;
+    --accent-soft:rgba(168,117,46,0.12);
+    --good:#2E7A4C;
+    --good-soft:rgba(46,122,76,0.10);
+    --alert:#B23B30;
+    --alert-soft:rgba(178,59,48,0.10);
+    --chart-fill:rgba(168,117,46,0.12);
   }
   *{box-sizing:border-box;}
   body{margin:0;}
@@ -40,6 +68,10 @@
     color:var(--text);
     font-family:'Inter',sans-serif;
     -webkit-font-smoothing:antialiased;
+    transition:background-color .2s ease, color .2s ease;
+  }
+  body, .card, .pulse-card, header.top, .modal, input, select, textarea, .total-card, .cal-day, .entry-row, .bar-track{
+    transition:background-color .2s ease, border-color .2s ease, color .2s ease;
   }
   h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0;}
   .mono{font-family:'IBM Plex Mono',monospace;}
@@ -136,6 +168,7 @@
   /* Form */
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .form-grid .full{grid-column:1 / -1;}
+  @media (max-width:520px){ .form-grid{grid-template-columns:1fr;} .form-grid .full{grid-column:1;} }
   label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:5px;}
   input,select,textarea{
     width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);
@@ -252,6 +285,7 @@
       <div class="sync-pill"><span class="dot" id="syncDot"></span><span id="syncText">Not configured</span></div>
       <button class="btn secondary" id="installBtn" style="display:none;padding:8px 14px;font-size:13px;">📲 Install app</button>
       <button class="icon-btn" id="wrappedBtn" title="Year in review">🎉</button>
+      <button class="icon-btn" id="themeToggleBtn" title="Switch theme">🌙</button>
       <button class="icon-btn" id="backupBtn" title="Download backup JSON">⇩</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </div>
@@ -580,6 +614,10 @@ function isConfigured(){
   return !!(settings.owner && settings.repo && settings.token);
 }
 
+function cssVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 /* ---------------- Date helpers ---------------- */
 function parseDateStr(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y, m-1, d); }
 function formatDateStr(d){ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
@@ -886,8 +924,8 @@ function renderPulse(){
     pulseChart = new Chart(ctx, {
       type:'line',
       data:{ labels, datasets:[
-        { label:'Cumulative spend', data:cumulative, borderColor:'#D4A24C', backgroundColor:'rgba(212,162,76,0.12)', fill:true, tension:0.25, pointRadius:0, borderWidth:2 },
-        ...(budget>0 ? [{ label:'Budget pace', data:budgetLine, borderColor:'#8B949E', borderDash:[4,4], pointRadius:0, borderWidth:1.3, fill:false }] : [])
+        { label:'Cumulative spend', data:cumulative, borderColor:cssVar('--accent'), backgroundColor:cssVar('--chart-fill'), fill:true, tension:0.25, pointRadius:0, borderWidth:2 },
+        ...(budget>0 ? [{ label:'Budget pace', data:budgetLine, borderColor:cssVar('--text-muted'), borderDash:[4,4], pointRadius:0, borderWidth:1.3, fill:false }] : [])
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
@@ -933,7 +971,7 @@ function renderCategoryBreakdown(){
     if(catChart) catChart.destroy();
     catChart = new Chart(ctx, {
       type:'doughnut',
-      data:{ labels:cats, datasets:[{ data:cats.map(c=>totals[c]), backgroundColor:cats.map(c=>CATEGORY_COLORS[c]||'#8B949E'), borderColor:'#161B22', borderWidth:2 }] },
+      data:{ labels:cats, datasets:[{ data:cats.map(c=>totals[c]), backgroundColor:cats.map(c=>CATEGORY_COLORS[c]||'#8B949E'), borderColor:cssVar('--surface'), borderWidth:2 }] },
       options:{ responsive:true, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> `${c.label}: ${formatINR(c.parsed)}` } } }, cutout:'68%' }
     });
   }else if(catChart){
@@ -1381,6 +1419,29 @@ function downloadBackup(){
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/* ---------------- Theme (light/dark) ---------------- */
+const THEME_KEY = 'ledger_theme_v1';
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.style.colorScheme = theme;
+  localStorage.setItem(THEME_KEY, theme);
+  const btn = document.getElementById('themeToggleBtn');
+  if(btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if(metaTheme) metaTheme.setAttribute('content', cssVar('--bg'));
+  // charts use hardcoded-at-render colors pulled from CSS vars — rebuild them so they match
+  if(document.getElementById('page-dashboard').classList.contains('active')){
+    renderPulse();
+    renderCategoryBreakdown();
+  }
+}
+document.getElementById('themeToggleBtn').addEventListener('click', ()=>{
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+// Sync the toggle icon + meta tag with whatever the pre-paint script already applied
+applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
 
 /* ---------------- PWA: install prompt + service worker ---------------- */
 let deferredInstallPrompt = null;
