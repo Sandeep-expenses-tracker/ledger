@@ -226,6 +226,14 @@
   .total-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;}
   .total-card .lbl{font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
   .total-card .amt{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600;margin-top:4px;}
+  .wk-nav{
+    background:none;border:1px solid var(--border);color:var(--text-muted);
+    width:22px;height:22px;border-radius:5px;cursor:pointer;font-size:12px;line-height:1;
+    display:inline-flex;align-items:center;justify-content:center;padding:0;
+    font-family:'Inter',sans-serif;
+  }
+  .wk-nav:hover{color:var(--text);border-color:var(--accent);}
+  .wk-nav:disabled{opacity:.35;cursor:not-allowed;}
 
   /* Category / chart row */
   .split-row{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;margin-top:18px;}
@@ -353,8 +361,15 @@
       <h3>Weekly / Monthly / Yearly</h3>
       <div class="totals-row">
         <div class="total-card">
-          <div class="lbl">This week</div>
+          <div class="lbl" style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+            <span id="weekLbl">This week</span>
+            <span style="display:inline-flex;gap:2px;">
+              <button type="button" class="wk-nav" id="weekPrev" title="Previous week">‹</button>
+              <button type="button" class="wk-nav" id="weekNext" title="Next week">›</button>
+            </span>
+          </div>
           <div class="amt mono" id="weekTotal">₹0</div>
+          <div id="weekRange" style="font-size:11px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;margin-top:3px;">—</div>
         </div>
         <div class="total-card">
           <div class="lbl">This month</div>
@@ -608,6 +623,7 @@ let fileSha = null;
 let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, expenses: [] };
 
 let selectedDate = formatDateStr(new Date());
+let weekViewDate = new Date(); // controls which week the widget shows
 let editingId = null;
 let calViewMonth = new Date(); calViewMonth.setDate(1);
 let pulseViewMonth = new Date(); pulseViewMonth.setDate(1);
@@ -801,7 +817,24 @@ function renderAll(){
 }
 
 function renderTotals(){
-  document.getElementById('weekTotal').textContent = formatINR(weekTotalFor(selectedDate));
+  const wkStart = startOfWeek(weekViewDate);
+  const wkEnd = endOfWeek(weekViewDate);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const thisWkStart = startOfWeek(now);
+  const lastWkStart = new Date(thisWkStart); lastWkStart.setDate(lastWkStart.getDate()-7);
+  let wkLabel;
+  if(wkStart.getTime() === thisWkStart.getTime()) wkLabel = 'This week';
+  else if(wkStart.getTime() === lastWkStart.getTime()) wkLabel = 'Last week';
+  else wkLabel = 'Week of';
+
+  const fmtShort = (d)=> d.toLocaleDateString('en-IN', {day:'numeric', month:'short'});
+  document.getElementById('weekLbl').textContent = wkLabel;
+  document.getElementById('weekTotal').textContent = formatINR(weekTotalFor(formatDateStr(weekViewDate)));
+  document.getElementById('weekRange').textContent = `${fmtShort(wkStart)} – ${fmtShort(wkEnd)}`;
+
+  // Disable Next arrow if we're already showing the current week (no future weeks worth navigating to)
+  document.getElementById('weekNext').disabled = wkStart.getTime() >= thisWkStart.getTime();
+
   document.getElementById('monthTotal').textContent = formatINR(monthTotalFor(selectedDate));
   document.getElementById('yearTotal').textContent = formatINR(yearTotalFor(selectedDate));
 }
@@ -1277,6 +1310,20 @@ document.getElementById('pulsePrev').addEventListener('click', ()=> navigateMont
 document.getElementById('pulseNext').addEventListener('click', ()=> navigateMonth(1));
 document.getElementById('budgetsPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
 document.getElementById('budgetsNextMonth').addEventListener('click', ()=> navigateMonth(1));
+
+document.getElementById('weekPrev').addEventListener('click', ()=>{
+  weekViewDate = new Date(weekViewDate);
+  weekViewDate.setDate(weekViewDate.getDate() - 7);
+  renderTotals();
+});
+document.getElementById('weekNext').addEventListener('click', ()=>{
+  weekViewDate = new Date(weekViewDate);
+  weekViewDate.setDate(weekViewDate.getDate() + 7);
+  const now = new Date(); now.setHours(0,0,0,0);
+  // Don't allow navigating past the current week
+  if(startOfWeek(weekViewDate).getTime() > startOfWeek(now).getTime()) weekViewDate = now;
+  renderTotals();
+});
 
 document.getElementById('editBudgetBtn').addEventListener('click', ()=>{
   const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
