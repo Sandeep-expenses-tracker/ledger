@@ -253,6 +253,29 @@
   .cat-budget-input{width:90px;padding:5px 8px;font-size:12.5px;text-align:right;}
   .cat-budget-spend{font-size:11.5px;color:var(--text-muted);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
 
+  .lib-row{
+    display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);
+  }
+  .lib-row:last-child{border-bottom:none;}
+  .lib-color{
+    width:32px;height:32px;border-radius:8px;flex-shrink:0;cursor:pointer;padding:0;
+    border:1px solid var(--border);background:none;
+  }
+  .lib-name{
+    flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);
+    padding:8px 11px;border-radius:var(--radius-sm);font-size:13.5px;min-width:0;
+  }
+  .lib-name:focus{outline:none;border-color:var(--accent);}
+  .lib-count{
+    font-size:11.5px;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;
+    white-space:nowrap;
+  }
+  .lib-del{
+    background:none;border:none;color:var(--text-muted);cursor:pointer;
+    font-size:15px;padding:4px 8px;border-radius:6px;
+  }
+  .lib-del:hover{color:var(--alert);background:var(--alert-soft);}
+
   /* Modal */
   .modal-backdrop{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;
@@ -319,6 +342,7 @@
     <button class="nav-btn" data-page="calendar">Calendar</button>
     <button class="nav-btn" data-page="search">Search</button>
     <button class="nav-btn" data-page="budgets">Budgets</button>
+    <button class="nav-btn" data-page="library">Library</button>
   </nav>
 
   <!-- ================= DASHBOARD ================= -->
@@ -423,26 +447,7 @@
           </div>
           <div>
             <label for="fCategory">Category</label>
-            <select id="fCategory">
-              <option>Food &amp; Dining</option>
-              <option>Groceries</option>
-              <option>Fruits &amp; Veggies</option>
-              <option>Supplements/Protein</option>
-              <option>Travel</option>
-              <option>Trips</option>
-              <option>Bills &amp; Utilities</option>
-              <option>Health &amp; Fitness</option>
-              <option>Cosmetics</option>
-              <option>Personal Care</option>
-              <option>Shopping</option>
-              <option>Entertainment</option>
-              <option>Subscriptions</option>
-              <option>Rent / Housing</option>
-              <option>EMI/Loan Repayment</option>
-              <option>Investments/Savings</option>
-              <option>Gifts &amp; Donations</option>
-              <option>Other</option>
-            </select>
+            <select id="fCategory"></select>
           </div>
           <div>
             <label for="fDesc">Description</label>
@@ -546,6 +551,36 @@
     </div>
   </section>
 
+  <!-- ================= LIBRARY ================= -->
+  <section class="page" id="page-library">
+    <div class="card">
+      <h3>Add new category</h3>
+      <div class="form-grid">
+        <div>
+          <label for="libNewName">Name</label>
+          <input type="text" id="libNewName" placeholder="e.g. Coffee runs" maxlength="40">
+        </div>
+        <div>
+          <label for="libNewColor">Color</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="color" id="libNewColor" value="#D4A24C" style="width:52px;height:40px;padding:2px;cursor:pointer;">
+            <button type="button" class="btn" id="libAddBtn">Add category</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-msg" id="libAddMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Existing categories</h3>
+      <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Rename or recolor any category. Renaming automatically updates every past expense tagged with it. Deleting a category with existing expenses lets you reassign them.</div>
+      <div id="libCategoryList"></div>
+      <div style="margin-top:16px;text-align:right;">
+        <button type="button" class="btn secondary" id="libResetBtn">Restore default categories</button>
+      </div>
+    </div>
+  </section>
+
   <footer class="foot">Data syncs to your GitHub repository · Nothing leaves your browser except direct calls to the GitHub API</footer>
 </div>
 
@@ -610,17 +645,41 @@
 /* ---------------- State & storage helpers ---------------- */
 const CACHE_KEY = 'ledger_data_cache_v1';
 const SETTINGS_KEY = 'ledger_settings_v1';
-const CATEGORY_COLORS = {
-  'Food & Dining':'#D4A24C','Groceries':'#7FA6A8','Fruits & Veggies':'#8FB35C','Supplements/Protein':'#5CA0B3',
-  'Travel':'#8B93C7','Trips':'#6E7FD4','Bills & Utilities':'#C4574B','Health & Fitness':'#4C9A6A','Cosmetics':'#C77FA6',
-  'Personal Care':'#D48AB0','Shopping':'#B784C7','Entertainment':'#D48A5E','Subscriptions':'#A98BC7',
-  'Rent / Housing':'#6E8FB0','EMI/Loan Repayment':'#B25C5C','Investments/Savings':'#5CA36B','Gifts & Donations':'#D4B45C',
-  'Other':'#8B949E'
-};
+const DEFAULT_CATEGORIES = [
+  {name:'Food & Dining', color:'#D4A24C'},
+  {name:'Groceries', color:'#7FA6A8'},
+  {name:'Fruits & Veggies', color:'#8FB35C'},
+  {name:'Supplements/Protein', color:'#5CA0B3'},
+  {name:'Travel', color:'#8B93C7'},
+  {name:'Trips', color:'#6E7FD4'},
+  {name:'Bills & Utilities', color:'#C4574B'},
+  {name:'Health & Fitness', color:'#4C9A6A'},
+  {name:'Cosmetics', color:'#C77FA6'},
+  {name:'Personal Care', color:'#D48AB0'},
+  {name:'Shopping', color:'#B784C7'},
+  {name:'Entertainment', color:'#D48A5E'},
+  {name:'Subscriptions', color:'#A98BC7'},
+  {name:'Rent / Housing', color:'#6E8FB0'},
+  {name:'EMI/Loan Repayment', color:'#B25C5C'},
+  {name:'Investments/Savings', color:'#5CA36B'},
+  {name:'Gifts & Donations', color:'#D4B45C'},
+  {name:'Other', color:'#8B949E'}
+];
+const PALETTE = ['#D4A24C','#7FA6A8','#8FB35C','#5CA0B3','#8B93C7','#6E7FD4','#C4574B','#4C9A6A','#C77FA6','#D48AB0','#B784C7','#D48A5E','#A98BC7','#6E8FB0','#B25C5C','#5CA36B','#D4B45C','#8B949E','#B39664','#7BA05F','#65A0B0','#B08265','#9B7BC0','#7BC08B'];
+
+// Legacy CATEGORY_COLORS getter that reads from state.categories for backward compat with the rest of the app.
+const CATEGORY_COLORS = new Proxy({}, {
+  get(_, key){
+    const cat = (state.categories || []).find(c => c.name === key);
+    return cat ? cat.color : '#8B949E';
+  },
+  ownKeys(){ return (state.categories || []).map(c => c.name); },
+  getOwnPropertyDescriptor(){ return { enumerable: true, configurable: true }; }
+});
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, expenses: [] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [] };
 
 let selectedDate = formatDateStr(new Date());
 let weekViewDate = new Date(); // controls which week the widget shows
@@ -699,6 +758,8 @@ async function githubLoad(){
     if(typeof parsed.monthly_budget === 'number') state.monthly_budget = parsed.monthly_budget;
     if(parsed.monthly_budgets && typeof parsed.monthly_budgets === 'object') state.monthly_budgets = parsed.monthly_budgets;
     if(parsed.category_budgets && typeof parsed.category_budgets === 'object') state.category_budgets = parsed.category_budgets;
+    if(Array.isArray(parsed.categories) && parsed.categories.length) state.categories = parsed.categories;
+    else if(!state.categories || !state.categories.length) state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -805,6 +866,7 @@ function budgetForMonth(year, month){
 
 /* ---------------- Rendering ---------------- */
 function renderAll(){
+  populateCategorySelects();
   renderCalendar();
   renderEntries();
   renderTotals();
@@ -814,6 +876,7 @@ function renderAll(){
   renderBigExpenses();
   renderCategoryBudgets();
   renderRecentExpenses();
+  renderLibrary();
 }
 
 function renderTotals(){
@@ -1027,17 +1090,34 @@ function renderCategoryBreakdown(){
   }
 }
 
-let searchCategoryOptionsBuilt = false;
-function ensureSearchCategoryOptions(){
-  if(searchCategoryOptionsBuilt) return;
-  const sel = document.getElementById('searchCategory');
-  Object.keys(CATEGORY_COLORS).forEach(cat=>{
-    const opt = document.createElement('option');
-    opt.value = cat; opt.textContent = cat;
-    sel.appendChild(opt);
-  });
-  searchCategoryOptionsBuilt = true;
+function populateCategorySelects(){
+  // Add form
+  const addSel = document.getElementById('fCategory');
+  if(addSel){
+    const currentAdd = addSel.value;
+    addSel.innerHTML = '';
+    state.categories.forEach(cat=>{
+      const opt = document.createElement('option');
+      opt.value = cat.name; opt.textContent = cat.name;
+      addSel.appendChild(opt);
+    });
+    // preserve current selection if still valid
+    if(currentAdd && state.categories.some(c=>c.name===currentAdd)) addSel.value = currentAdd;
+  }
+  // Search filter
+  const searchSel = document.getElementById('searchCategory');
+  if(searchSel){
+    const currentSearch = searchSel.value;
+    searchSel.innerHTML = '<option value="">All categories</option>';
+    state.categories.forEach(cat=>{
+      const opt = document.createElement('option');
+      opt.value = cat.name; opt.textContent = cat.name;
+      searchSel.appendChild(opt);
+    });
+    if(currentSearch && (currentSearch==='' || state.categories.some(c=>c.name===currentSearch))) searchSel.value = currentSearch;
+  }
 }
+function ensureSearchCategoryOptions(){ /* kept for callers; delegates to populateCategorySelects */ populateCategorySelects(); }
 
 function renderSearch(){
   ensureSearchCategoryOptions();
@@ -1157,8 +1237,98 @@ function categorySpendForMonth(category, year, month){
   }));
 }
 
-function renderCategoryBudgets(){
-  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+function renameCategoryEverywhere(oldName, newName){
+  state.expenses.forEach(e=>{ if(e.category === oldName) e.category = newName; });
+  if(state.category_budgets && Object.prototype.hasOwnProperty.call(state.category_budgets, oldName)){
+    state.category_budgets[newName] = state.category_budgets[oldName];
+    delete state.category_budgets[oldName];
+  }
+}
+
+function categoryUsageCount(name){
+  return state.expenses.filter(e=>e.category===name).length;
+}
+
+function addCategory(name, color){
+  name = name.trim();
+  if(!name) return {ok:false, msg:'Please enter a name.'};
+  if(state.categories.some(c=>c.name.toLowerCase() === name.toLowerCase())) return {ok:false, msg:'A category with that name already exists.'};
+  state.categories.push({name, color: color || PALETTE[state.categories.length % PALETTE.length]});
+  githubSave();
+  return {ok:true};
+}
+
+function updateCategory(index, patch){
+  const cat = state.categories[index];
+  if(!cat) return;
+  if(patch.name !== undefined && patch.name !== cat.name){
+    const newName = patch.name.trim();
+    if(!newName) return;
+    if(state.categories.some((c,i)=>i!==index && c.name.toLowerCase()===newName.toLowerCase())){
+      window.alert('A category with that name already exists.');
+      renderLibrary(); // revert visible input
+      return;
+    }
+    renameCategoryEverywhere(cat.name, newName);
+    cat.name = newName;
+  }
+  if(patch.color !== undefined) cat.color = patch.color;
+  githubSave();
+  renderAll();
+}
+
+function deleteCategory(index){
+  const cat = state.categories[index];
+  if(!cat) return;
+  const count = categoryUsageCount(cat.name);
+  if(count > 0){
+    const others = state.categories.filter((_,i)=>i!==index).map(c=>c.name);
+    if(!others.length){ window.alert(`Cannot delete the last remaining category.`); return; }
+    const target = window.prompt(
+      `"${cat.name}" is used by ${count} expense${count===1?'':'s'}. Reassign those expenses to which category?\n\nAvailable: ${others.join(', ')}`,
+      others[0]
+    );
+    if(target === null) return;
+    const match = state.categories.find(c=>c.name.toLowerCase() === target.trim().toLowerCase() && c.name !== cat.name);
+    if(!match){ window.alert(`"${target}" is not a valid category.`); return; }
+    renameCategoryEverywhere(cat.name, match.name);
+  }else{
+    if(!window.confirm(`Delete category "${cat.name}"?`)) return;
+  }
+  if(state.category_budgets) delete state.category_budgets[cat.name];
+  state.categories.splice(index, 1);
+  githubSave();
+  renderAll();
+}
+
+function renderLibrary(){
+  const list = document.getElementById('libCategoryList');
+  if(!list) return;
+  list.innerHTML = '';
+  state.categories.forEach((cat, index)=>{
+    const count = categoryUsageCount(cat.name);
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    row.innerHTML = `
+      <input type="color" class="lib-color" value="${cat.color}" data-index="${index}" title="Color">
+      <input type="text" class="lib-name" value="${escapeHtml(cat.name)}" data-index="${index}" maxlength="40">
+      <span class="lib-count">${count} entr${count===1?'y':'ies'}</span>
+      <button type="button" class="lib-del" data-index="${index}" title="Delete category">✕</button>
+    `;
+    row.querySelector('.lib-color').addEventListener('change', (e)=>{
+      updateCategory(index, {color: e.target.value});
+    });
+    row.querySelector('.lib-name').addEventListener('change', (e)=>{
+      updateCategory(index, {name: e.target.value});
+    });
+    row.querySelector('.lib-del').addEventListener('click', ()=>{
+      deleteCategory(index);
+    });
+    list.appendChild(row);
+  });
+}
+
+function renderCategoryBudgets(){  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
   const list = document.getElementById('catBudgetList');
   list.innerHTML = '';
   Object.keys(CATEGORY_COLORS).forEach(cat=>{
@@ -1198,7 +1368,7 @@ function escapeHtml(s){
 }
 
 /* ---------------- Page routing ---------------- */
-const PAGE_IDS = ['dashboard','add','calendar','search','budgets'];
+const PAGE_IDS = ['dashboard','add','calendar','search','budgets','library'];
 let currentPage = 'dashboard';
 
 function applyPage(pageId){
@@ -1310,6 +1480,36 @@ document.getElementById('pulsePrev').addEventListener('click', ()=> navigateMont
 document.getElementById('pulseNext').addEventListener('click', ()=> navigateMonth(1));
 document.getElementById('budgetsPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
 document.getElementById('budgetsNextMonth').addEventListener('click', ()=> navigateMonth(1));
+
+document.getElementById('libAddBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('libNewName').value;
+  const color = document.getElementById('libNewColor').value;
+  const msgEl = document.getElementById('libAddMsg');
+  const result = addCategory(name, color);
+  if(result.ok){
+    document.getElementById('libNewName').value = '';
+    document.getElementById('libNewColor').value = PALETTE[state.categories.length % PALETTE.length];
+    msgEl.textContent = `Added "${name.trim()}"`;
+    msgEl.className = 'modal-msg ok';
+    renderAll();
+    setTimeout(()=>{ if(msgEl.textContent.startsWith('Added ')) msgEl.textContent=''; }, 3500);
+  }else{
+    msgEl.textContent = result.msg;
+    msgEl.className = 'modal-msg err';
+  }
+});
+
+document.getElementById('libResetBtn').addEventListener('click', ()=>{
+  if(!window.confirm('Restore the default category list? Any custom categories you added will be removed. Past expenses tagged with a removed category will be reassigned to "Other".')) return;
+  const defaultNames = new Set(DEFAULT_CATEGORIES.map(c=>c.name));
+  state.expenses.forEach(e=>{ if(!defaultNames.has(e.category)) e.category = 'Other'; });
+  if(state.category_budgets){
+    Object.keys(state.category_budgets).forEach(k=>{ if(!defaultNames.has(k)) delete state.category_budgets[k]; });
+  }
+  state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
+  githubSave();
+  renderAll();
+});
 
 document.getElementById('weekPrev').addEventListener('click', ()=>{
   weekViewDate = new Date(weekViewDate);
@@ -1532,6 +1732,9 @@ async function init(){
   document.getElementById('fDate').value = selectedDate;
   const cached = loadCache();
   if(cached) state = cached;
+  if(!Array.isArray(state.categories) || !state.categories.length){
+    state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
+  }
   if(isConfigured()){
     await githubLoad();
   }else{
