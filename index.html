@@ -62,7 +62,11 @@
     --chart-fill:rgba(184,134,62,0.10);
   }
   *{box-sizing:border-box;}
-  body{margin:0;}
+  body{margin:0;overscroll-behavior-y:contain;}
+  button, .nav-btn, select, [role="button"]{cursor:pointer;}
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
+  }
   html,body{
     background:var(--bg);
     color:var(--text);
@@ -112,6 +116,9 @@
     padding:20px;
   }
   .card + .card{margin-top:18px;}
+  .card{transition:transform .18s ease, box-shadow .18s ease, background-color .2s ease, border-color .2s ease, color .2s ease;}
+  .total-card{transition:transform .15s ease, border-color .15s ease;}
+  .total-card:hover{transform:translateY(-1px);border-color:var(--accent);}
   .card h3{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-family:'Inter',sans-serif;font-weight:600;margin-bottom:14px;}
   :root[data-theme="light"] .card,
   :root[data-theme="light"] .pulse-card,
@@ -371,7 +378,7 @@
           <button id="pulseNext">›</button>
         </div>
       </div>
-      <canvas id="pulseChart" height="55"></canvas>
+      <canvas id="pulseChart" height="150"></canvas>
       <div style="margin-top:10px;">
         <div class="budget-row">
           <span>Monthly budget</span>
@@ -443,7 +450,7 @@
           </div>
           <div>
             <label for="fAmount">Amount (₹)</label>
-            <input type="number" id="fAmount" class="mono-input" min="0" step="0.01" placeholder="0.00" required>
+            <input type="number" id="fAmount" class="mono-input" min="0" step="0.01" inputmode="decimal" placeholder="0.00" required>
           </div>
           <div>
             <label for="fCategory">Category</label>
@@ -614,7 +621,7 @@
     </div>
     <div class="field">
       <label for="sBudget">Default monthly budget (₹)</label>
-      <input type="number" id="sBudget" class="mono-input" min="0" step="100" placeholder="e.g. 25000">
+      <input type="number" id="sBudget" class="mono-input" min="0" step="100" inputmode="numeric" placeholder="e.g. 25000">
     </div>
     <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Used for any month you haven't set a specific budget for. To set a budget for a particular month (e.g. this month), use the ✏️ edit link next to the budget bar on the main page instead.</div>
     <div class="modal-msg" id="modalMsg"></div>
@@ -1025,31 +1032,109 @@ function renderPulse(){
   if(bar2){ bar2.style.width = budgetPct+'%'; bar2.style.background = barColor; }
 
   const labels = dailyTotals.map((_,i)=>String(i+1));
-  const budgetLine = budget>0 ? dailyTotals.map((_,i)=> budget/daysInMonth*(i+1)) : [];
+  const dailyBudget = budget>0 ? budget/daysInMonth : 0;
+
+  // Split each day's spend into "within pace" (base) and "over pace" (overflow cap),
+  // matching the reference: solid bar for spend up to the daily budget, pink cap for the excess.
+  const baseSpend = dailyTotals.map(v => dailyBudget>0 ? Math.min(v, dailyBudget) : v);
+  const overSpend = dailyTotals.map(v => dailyBudget>0 ? Math.max(0, v - dailyBudget) : 0);
+  const daysWithData = dailyTotals.filter(v=>v>0).length;
+  const avgPerActiveDay = daysWithData>0 ? dailyTotals.reduce((s,v)=>s+v,0)/daysWithData : 0;
+
+  const accent = cssVar('--accent');
+  const alertColor = cssVar('--alert');
+  const mutedFill = cssVar('--surface-2');
+  const gridColor = cssVar('--border');
+  const textMuted = cssVar('--text-muted');
+
+  // Bars for days with no spend render as a faint gray stub so the axis reads like the reference.
+  const baseColors = dailyTotals.map(v => v>0 ? accent : mutedFill);
 
   const dashboardVisible = document.getElementById('page-dashboard').classList.contains('active');
   if(dashboardVisible){
     const ctx = document.getElementById('pulseChart').getContext('2d');
     if(pulseChart) pulseChart.destroy();
+
+    // Dotted average line drawn across the chart via a tiny inline plugin.
+    const avgLinePlugin = {
+      id: 'avgLine',
+      afterDatasetsDraw(chart){
+        if(avgPerActiveDay<=0) return;
+        const {ctx, chartArea:{left,right}, scales:{y}} = chart;
+        const yPos = y.getPixelForValue(avgPerActiveDay);
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([2,4]);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = textMuted;
+        ctx.moveTo(left, yPos);
+        ctx.lineTo(right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
     pulseChart = new Chart(ctx, {
-      type:'line',
+      type:'bar',
       data:{ labels, datasets:[
-        { label:'Cumulative spend', data:cumulative, borderColor:cssVar('--accent'), backgroundColor:cssVar('--chart-fill'), fill:true, tension:0.25, pointRadius:0, borderWidth:2 },
-        ...(budget>0 ? [{ label:'Budget pace', data:budgetLine, borderColor:cssVar('--text-muted'), borderDash:[4,4], pointRadius:0, borderWidth:1.3, fill:false }] : [])
+        {
+          label:'Spend', data:baseSpend, backgroundColor:baseColors,
+          borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},
+          borderSkipped:false, stack:'s', barPercentage:0.72, categoryPercentage:0.86
+        },
+        {
+          label:'Over budget', data:overSpend,
+          backgroundColor: hexToRgba(alertColor, 0.30),
+          borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},
+          borderSkipped:false, stack:'s', barPercentage:0.72, categoryPercentage:0.86
+        }
       ]},
       options:{
         responsive:true, maintainAspectRatio:false,
-        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:(c)=> formatINR(c.parsed.y) } } },
+        animation:{ duration:450, easing:'easeOutQuart' },
+        plugins:{
+          legend:{display:false},
+          tooltip:{
+            callbacks:{
+              title:(items)=> `${monthLabel(pulseViewMonth).split(' ')[0]} ${items[0].label}`,
+              label:(c)=>{
+                const total = dailyTotals[c.dataIndex];
+                if(c.datasetIndex===0) return `Spent: ${formatINR(total)}`;
+                return total>dailyBudget ? `Over daily budget by ${formatINR(total-dailyBudget)}` : '';
+              }
+            }
+          }
+        },
         scales:{
-          x:{ display:false },
-          y:{ display:false }
+          x:{
+            stacked:true, grid:{display:false},
+            ticks:{ color:textMuted, font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }
+          },
+          y:{
+            stacked:true, beginAtZero:true,
+            grid:{ color:gridColor, drawTicks:false },
+            border:{display:false},
+            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:4, callback:(v)=> v>=1000 ? (v/1000)+'k' : v }
+          }
         }
-      }
+      },
+      plugins:[avgLinePlugin]
     });
   }else if(pulseChart){
     pulseChart.destroy();
     pulseChart = null;
   }
+}
+
+function hexToRgba(hex, alpha){
+  hex = hex.trim();
+  if(hex.startsWith('#')){
+    let h = hex.slice(1);
+    if(h.length===3) h = h.split('').map(c=>c+c).join('');
+    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  return hex;
 }
 
 function renderCategoryBreakdown(){
@@ -1343,7 +1428,7 @@ function renderCategoryBudgets(){  const year = pulseViewMonth.getFullYear(), mo
         <div class="cat-budget-name"><span class="cat-swatch" style="background:${CATEGORY_COLORS[cat]}"></span>${escapeHtml(cat)}</div>
         <div class="cat-budget-input-wrap">
           <span>₹</span>
-          <input type="number" min="0" step="100" class="mono-input cat-budget-input" data-cat="${escapeHtml(cat)}" value="${budget || ''}" placeholder="no cap">
+          <input type="number" min="0" step="100" inputmode="numeric" class="mono-input cat-budget-input" data-cat="${escapeHtml(cat)}" value="${budget || ''}" placeholder="no cap">
         </div>
       </div>
       <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
