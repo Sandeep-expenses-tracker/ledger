@@ -1034,21 +1034,61 @@ function renderPulse(){
   const labels = dailyTotals.map((_,i)=>String(i+1));
   const dailyBudget = budget>0 ? budget/daysInMonth : 0;
 
-  // Split each day's spend into "within pace" (base) and "over pace" (overflow cap),
-  // matching the reference: solid bar for spend up to the daily budget, pink cap for the excess.
-  const baseSpend = dailyTotals.map(v => dailyBudget>0 ? Math.min(v, dailyBudget) : v);
-  const overSpend = dailyTotals.map(v => dailyBudget>0 ? Math.max(0, v - dailyBudget) : 0);
+  // Gather every individual payment per day (not just the day's sum), so each
+  // payment can be its own colored, hoverable segment in that day's stacked bar.
+  const paymentsByDay = Array.from({length:daysInMonth}, ()=>[]);
+  state.expenses.forEach(e=>{
+    const d = parseDateStr(e.date);
+    if(d.getFullYear()===year && d.getMonth()===month){
+      paymentsByDay[d.getDate()-1].push(e);
+    }
+  });
+  // Sort each day's payments largest-first so big spends sit at the bottom of the stack.
+  paymentsByDay.forEach(list => list.sort((a,b)=> Number(b.amount)-Number(a.amount)));
+  const maxPaymentsInADay = paymentsByDay.reduce((m,list)=> Math.max(m, list.length), 0);
+
   const daysWithData = dailyTotals.filter(v=>v>0).length;
   const avgPerActiveDay = daysWithData>0 ? dailyTotals.reduce((s,v)=>s+v,0)/daysWithData : 0;
+  // Y-axis tops out at the highest single-day total (not the whole-month scale),
+  // so lighter days aren't squashed flat. A little headroom keeps the tallest bar off the ceiling.
+  const maxDayTotal = Math.max(0, ...dailyTotals);
 
-  const accent = cssVar('--accent');
-  const alertColor = cssVar('--alert');
   const mutedFill = cssVar('--surface-2');
   const gridColor = cssVar('--border');
   const textMuted = cssVar('--text-muted');
 
-  // Bars for days with no spend render as a faint gray stub so the axis reads like the reference.
-  const baseColors = dailyTotals.map(v => v>0 ? accent : mutedFill);
+  // Build one dataset per "payment slot". Slot 0 holds each day's largest payment,
+  // slot 1 the next, etc. Each bar segment carries its own color + payment meta for tooltips.
+  const datasets = [];
+  for(let slot=0; slot<Math.max(1, maxPaymentsInADay); slot++){
+    const data = [];
+    const colors = [];
+    const meta = [];
+    for(let day=0; day<daysInMonth; day++){
+      const p = paymentsByDay[day][slot];
+      if(p){
+        data.push(Number(p.amount));
+        colors.push(CATEGORY_COLORS[p.category] || '#8B949E');
+        meta.push(p);
+      }else{
+        data.push(0);
+        colors.push('rgba(0,0,0,0)');
+        meta.push(null);
+      }
+    }
+    datasets.push({
+      label:`slot${slot}`, data, backgroundColor:colors, _meta:meta,
+      borderSkipped:false, stack:'day', barPercentage:0.72, categoryPercentage:0.86,
+      borderRadius:2
+    });
+  }
+  // Faint stub for days with zero spend so the day axis still reads cleanly.
+  datasets.push({
+    label:'_empty',
+    data: dailyTotals.map(v=> v===0 ? (maxDayTotal>0 ? maxDayTotal*0.012 : 1) : 0),
+    backgroundColor: mutedFill, _meta: dailyTotals.map(()=>null),
+    borderSkipped:false, stack:'day', barPercentage:0.72, categoryPercentage:0.86
+  });
 
   const dashboardVisible = document.getElementById('page-dashboard').classList.contains('active');
   if(dashboardVisible){
@@ -1076,31 +1116,35 @@ function renderPulse(){
 
     pulseChart = new Chart(ctx, {
       type:'bar',
-      data:{ labels, datasets:[
-        {
-          label:'Spend', data:baseSpend, backgroundColor:baseColors,
-          borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},
-          borderSkipped:false, stack:'s', barPercentage:0.72, categoryPercentage:0.86
-        },
-        {
-          label:'Over budget', data:overSpend,
-          backgroundColor: hexToRgba(alertColor, 0.30),
-          borderRadius:{topLeft:3,topRight:3,bottomLeft:0,bottomRight:0},
-          borderSkipped:false, stack:'s', barPercentage:0.72, categoryPercentage:0.86
-        }
-      ]},
+      data:{ labels, datasets },
       options:{
         responsive:true, maintainAspectRatio:false,
         animation:{ duration:450, easing:'easeOutQuart' },
         plugins:{
           legend:{display:false},
           tooltip:{
+            filter:(item)=>{
+              // Hide the empty-stub dataset and any zero segments from the tooltip.
+              const ds = item.chart.data.datasets[item.datasetIndex];
+              if(ds.label==='_empty') return false;
+              return item.parsed.y > 0 && ds._meta && ds._meta[item.dataIndex];
+            },
             callbacks:{
-              title:(items)=> `${monthLabel(pulseViewMonth).split(' ')[0]} ${items[0].label}`,
+              title:(items)=>{
+                if(!items.length) return '';
+                return `${monthLabel(pulseViewMonth).split(' ')[0]} ${items[0].label}`;
+              },
               label:(c)=>{
-                const total = dailyTotals[c.dataIndex];
-                if(c.datasetIndex===0) return `Spent: ${formatINR(total)}`;
-                return total>dailyBudget ? `Over daily budget by ${formatINR(total-dailyBudget)}` : '';
+                const ds = c.chart.data.datasets[c.datasetIndex];
+                const p = ds._meta && ds._meta[c.dataIndex];
+                if(!p) return '';
+                return `${p.description} · ${p.category}: ${formatINR(p.amount)}`;
+              },
+              afterBody:(items)=>{
+                if(!items.length) return '';
+                const day = Number(items[0].label);
+                const total = dailyTotals[day-1];
+                return `\nDay total: ${formatINR(total)}`;
               }
             }
           }
@@ -1112,9 +1156,10 @@ function renderPulse(){
           },
           y:{
             stacked:true, beginAtZero:true,
+            suggestedMax: maxDayTotal>0 ? maxDayTotal*1.08 : undefined,
             grid:{ color:gridColor, drawTicks:false },
             border:{display:false},
-            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:4, callback:(v)=> v>=1000 ? (v/1000)+'k' : v }
+            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:4, callback:(v)=> v>=1000 ? (Math.round(v/100)/10)+'k' : v }
           }
         }
       },
