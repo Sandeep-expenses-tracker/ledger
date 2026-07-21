@@ -1156,10 +1156,18 @@ function renderPulse(){
           },
           y:{
             stacked:true, beginAtZero:true,
-            suggestedMax: maxDayTotal>0 ? maxDayTotal*1.08 : undefined,
+            max: maxDayTotal>0 ? maxDayTotal : undefined,
             grid:{ color:gridColor, drawTicks:false },
             border:{display:false},
-            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:4, callback:(v)=> v>=1000 ? (Math.round(v/100)/10)+'k' : v }
+            afterBuildTicks: (axis)=>{
+              // Guarantee the very top tick equals the highest day's total, so the
+              // peak value is labelled at the ceiling rather than hidden.
+              if(maxDayTotal>0){
+                const hasTop = axis.ticks.some(t=> Math.abs(t.value - maxDayTotal) < 0.5);
+                if(!hasTop) axis.ticks.push({ value: maxDayTotal });
+              }
+            },
+            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:5, callback:(v)=> v>=1000 ? (Math.round(v/100)/10)+'k' : Math.round(v) }
           }
         }
       },
