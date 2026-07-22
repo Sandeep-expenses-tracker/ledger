@@ -283,6 +283,23 @@
   }
   .lib-del:hover{color:var(--alert);background:var(--alert-soft);}
 
+  /* Returns */
+  .entry-desc.returned-full{text-decoration:line-through;opacity:.55;}
+  .entry-amount.returned-full{text-decoration:line-through;opacity:.55;}
+  .ret-badge{
+    display:inline-block;font-size:10px;padding:2px 7px;border-radius:999px;
+    background:var(--good-soft);color:var(--good);border:1px solid var(--good);
+    white-space:nowrap;
+  }
+  .ret-badge.partial{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+  .net-amount{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--good);}
+  .ret-btn{
+    background:none;border:none;color:var(--text-muted);cursor:pointer;
+    font-size:14px;padding:2px 5px;border-radius:5px;
+  }
+  .ret-btn:hover{color:var(--good);background:var(--good-soft);}
+  .figure-value.good, .amt.good{color:var(--good);}
+
   /* Modal */
   .modal-backdrop{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;
@@ -348,6 +365,7 @@
     <button class="nav-btn" data-page="add">Add expense</button>
     <button class="nav-btn" data-page="calendar">Calendar</button>
     <button class="nav-btn" data-page="search">Search</button>
+    <button class="nav-btn" data-page="returns">Returns</button>
     <button class="nav-btn" data-page="budgets">Budgets</button>
     <button class="nav-btn" data-page="library">Library</button>
   </nav>
@@ -558,6 +576,43 @@
     </div>
   </section>
 
+  <!-- ================= RETURNS ================= -->
+  <section class="page" id="page-returns">
+    <div class="card">
+      <h3>Returns summary</h3>
+      <div class="totals-row">
+        <div class="total-card">
+          <div class="lbl">Refunded this month</div>
+          <div class="amt mono good" id="returnsMonthTotal">₹0</div>
+          <div class="cat-budget-spend" id="returnsMonthLabel">—</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Refunded this year</div>
+          <div class="amt mono good" id="returnsYearTotal">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Refunds logged</div>
+          <div class="amt mono" id="returnsCount">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Mark an expense as returned</h3>
+      <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Search for the purchase you're returning, then hit ↩ to log the refund. Refunds count against the month the money came back, and can be partial.</div>
+      <input type="text" id="returnSearchText" placeholder="Search your expenses to return…" style="margin-bottom:12px;">
+      <div id="returnableList" style="max-height:320px;overflow-y:auto;"></div>
+    </div>
+
+    <div class="card">
+      <div class="entries-head">
+        <span class="date-label">All returns</span>
+        <span class="day-total mono good" id="returnsAllTotal">₹0</span>
+      </div>
+      <div id="returnsList"></div>
+    </div>
+  </section>
+
   <!-- ================= LIBRARY ================= -->
   <section class="page" id="page-library">
     <div class="card">
@@ -686,7 +741,7 @@ const CATEGORY_COLORS = new Proxy({}, {
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [], returns: [] };
 
 let selectedDate = formatDateStr(new Date());
 let weekViewDate = new Date(); // controls which week the widget shows
@@ -767,6 +822,7 @@ async function githubLoad(){
     if(parsed.category_budgets && typeof parsed.category_budgets === 'object') state.category_budgets = parsed.category_budgets;
     if(Array.isArray(parsed.categories) && parsed.categories.length) state.categories = parsed.categories;
     else if(!state.categories || !state.categories.length) state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
+    state.returns = Array.isArray(parsed.returns) ? parsed.returns : [];
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -830,9 +886,74 @@ function updateExpense(id, date, amount, description, category){
 function deleteExpense(id){
   const entry = state.expenses.find(e=>e.id===id);
   const label = entry ? `${entry.description} (${formatINR(entry.amount)})` : 'this entry';
-  if(!window.confirm(`Delete ${label}? This can't be undone.`)) return;
+  const linkedReturns = returnsForExpense(id).length;
+  const extra = linkedReturns ? `\n\nThis will also remove ${linkedReturns} linked return${linkedReturns===1?'':'s'}.` : '';
+  if(!window.confirm(`Delete ${label}? This can't be undone.${extra}`)) return;
   state.expenses = state.expenses.filter(e=>e.id!==id);
+  state.returns = allReturns().filter(r=>r.expense_id!==id);
   githubSave();
+  renderAll();
+}
+
+/* ---------------- Returns / refunds ---------------- */
+function addReturn(expenseId, amount, date, note){
+  const expense = findExpenseById(expenseId);
+  if(!expense) return {ok:false, msg:'Original expense not found.'};
+  const amt = Number(amount);
+  if(!amt || amt <= 0) return {ok:false, msg:'Enter a refund amount greater than zero.'};
+  const remaining = remainingOn(expense);
+  if(amt > remaining + 0.001){
+    return {ok:false, msg:`Refund can't exceed the ${formatINR(remaining)} still outstanding on this expense.`};
+  }
+  state.returns = allReturns();
+  state.returns.push({
+    id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,7),
+    expense_id: expenseId,
+    amount: amt,
+    date: date,
+    note: (note||'').trim()
+  });
+  state.returns.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+  return {ok:true};
+}
+
+function deleteReturn(returnId){
+  const r = allReturns().find(x=>x.id===returnId);
+  if(!r) return;
+  const expense = findExpenseById(r.expense_id);
+  const label = expense ? expense.description : 'this item';
+  if(!window.confirm(`Remove the ${formatINR(r.amount)} refund on "${label}"? The expense will count in full again.`)) return;
+  state.returns = allReturns().filter(x=>x.id!==returnId);
+  githubSave();
+  renderAll();
+}
+
+function promptReturn(expenseId){
+  const expense = findExpenseById(expenseId);
+  if(!expense) return;
+  const remaining = remainingOn(expense);
+  if(remaining <= 0.001){
+    window.alert(`"${expense.description}" has already been fully refunded.`);
+    return;
+  }
+  const amtInput = window.prompt(
+    `Refund for "${expense.description}"\nOriginal: ${formatINR(expense.amount)} · Outstanding: ${formatINR(remaining)}\n\nHow much was refunded? (₹)`,
+    String(remaining)
+  );
+  if(amtInput === null) return;
+  const dateInput = window.prompt(
+    `What date did the refund come back?\n(This is the month the money is credited back to.)`,
+    formatDateStr(new Date())
+  );
+  if(dateInput === null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())){
+    window.alert('Please use the format YYYY-MM-DD for the refund date.');
+    return;
+  }
+  const note = window.prompt('Optional note (e.g. "wrong size", "damaged"):', '') || '';
+  const result = addReturn(expenseId, amtInput, dateInput.trim(), note);
+  if(!result.ok){ window.alert(result.msg); return; }
   renderAll();
 }
 
@@ -840,21 +961,48 @@ function deleteExpense(id){
 function expensesFor(predicate){ return state.expenses.filter(predicate); }
 function sum(list){ return list.reduce((s,e)=>s+Number(e.amount||0),0); }
 
+/* Returns (refunds). A refund is counted against the period in which the money
+   actually came back (its own date), not the month of the original purchase. */
+function allReturns(){ return Array.isArray(state.returns) ? state.returns : []; }
+function returnsFor(predicate){ return allReturns().filter(predicate); }
+function sumReturns(list){ return list.reduce((s,r)=>s+Number(r.amount||0),0); }
+
+function returnsForExpense(expenseId){ return allReturns().filter(r=>r.expense_id===expenseId); }
+function totalReturnedFor(expenseId){ return sumReturns(returnsForExpense(expenseId)); }
+function remainingOn(expense){
+  return Math.max(0, Number(expense.amount||0) - totalReturnedFor(expense.id));
+}
+function returnStatus(expense){
+  const returned = totalReturnedFor(expense.id);
+  if(returned <= 0.001) return 'none';
+  return returned >= Number(expense.amount||0) - 0.001 ? 'full' : 'partial';
+}
+function findExpenseById(id){ return state.expenses.find(e=>e.id===id); }
+
 function weekTotalFor(dateStr){
   const d = parseDateStr(dateStr);
   const s = startOfWeek(d), e = endOfWeek(d);
-  return sum(expensesFor(x=>{ const xd=parseDateStr(x.date); return xd>=s && xd<=e; }));
+  const spent = sum(expensesFor(x=>{ const xd=parseDateStr(x.date); return xd>=s && xd<=e; }));
+  const refunded = sumReturns(returnsFor(r=>{ const rd=parseDateStr(r.date); return rd>=s && rd<=e; }));
+  return spent - refunded;
 }
 function monthTotalFor(dateStr){
   const d = parseDateStr(dateStr);
-  return sum(expensesFor(x=>{ const xd=parseDateStr(x.date); return xd.getFullYear()===d.getFullYear() && xd.getMonth()===d.getMonth(); }));
+  const inMonth = (dt)=> dt.getFullYear()===d.getFullYear() && dt.getMonth()===d.getMonth();
+  const spent = sum(expensesFor(x=> inMonth(parseDateStr(x.date))));
+  const refunded = sumReturns(returnsFor(r=> inMonth(parseDateStr(r.date))));
+  return spent - refunded;
 }
 function yearTotalFor(dateStr){
   const d = parseDateStr(dateStr);
-  return sum(expensesFor(x=> parseDateStr(x.date).getFullYear()===d.getFullYear()));
+  const spent = sum(expensesFor(x=> parseDateStr(x.date).getFullYear()===d.getFullYear()));
+  const refunded = sumReturns(returnsFor(r=> parseDateStr(r.date).getFullYear()===d.getFullYear()));
+  return spent - refunded;
 }
 function dayTotalFor(dateStr){
-  return sum(expensesFor(x=>x.date===dateStr));
+  const spent = sum(expensesFor(x=>x.date===dateStr));
+  const refunded = sumReturns(returnsFor(r=>r.date===dateStr));
+  return spent - refunded;
 }
 
 function pad2(n){ return String(n).padStart(2,'0'); }
@@ -884,6 +1032,7 @@ function renderAll(){
   renderCategoryBudgets();
   renderRecentExpenses();
   renderLibrary();
+  renderReturns();
 }
 
 function renderTotals(){
@@ -909,6 +1058,23 @@ function renderTotals(){
   document.getElementById('yearTotal').textContent = formatINR(yearTotalFor(selectedDate));
 }
 
+/* Shared bits for rendering an expense row consistently across pages. */
+function returnBadgeHtml(e){
+  const status = returnStatus(e);
+  if(status === 'none') return '';
+  if(status === 'full') return ` <span class="ret-badge">returned</span>`;
+  return ` <span class="ret-badge partial">part refunded</span>`;
+}
+function amountCellHtml(e){
+  const status = returnStatus(e);
+  if(status === 'none') return `<span class="entry-amount">${formatINR(e.amount)}</span>`;
+  if(status === 'full') return `<span class="entry-amount returned-full">${formatINR(e.amount)}</span>`;
+  return `<span class="entry-amount">${formatINR(remainingOn(e))}</span>`;
+}
+function descClass(e){
+  return returnStatus(e) === 'full' ? 'entry-desc returned-full' : 'entry-desc';
+}
+
 function renderEntries(){
   const list = document.getElementById('entriesList');
   const entries = state.expenses.filter(e=>e.date===selectedDate).sort((a,b)=>b.id.localeCompare(a.id));
@@ -925,14 +1091,16 @@ function renderEntries(){
     row.className = 'entry-row';
     row.innerHTML = `
       <div class="entry-left">
-        <span class="entry-desc">${escapeHtml(e.description)}</span>
-        <span class="tag">${escapeHtml(e.category)}</span>
+        <span class="${descClass(e)}">${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)}${returnBadgeHtml(e)}</span>
       </div>
       <div class="entry-right">
-        <span class="entry-amount">${formatINR(e.amount)}</span>
+        ${amountCellHtml(e)}
+        <button class="ret-btn" title="Mark as returned" data-id="${e.id}" data-action="return">↩</button>
         <button class="del-btn" title="Edit" data-id="${e.id}" data-action="edit">✏️</button>
         <button class="del-btn" title="Delete" data-id="${e.id}" data-action="delete">✕</button>
       </div>`;
+    row.querySelector('[data-action="return"]').addEventListener('click', ()=>promptReturn(e.id));
     row.querySelector('[data-action="edit"]').addEventListener('click', ()=>startEdit(e.id));
     row.querySelector('[data-action="delete"]').addEventListener('click', ()=>deleteExpense(e.id));
     list.appendChild(row);
@@ -979,8 +1147,16 @@ function renderPulse(){
     const d = parseDateStr(e.date);
     if(d.getFullYear()===year && d.getMonth()===month){ dailyTotals[d.getDate()-1] += Number(e.amount||0); }
   });
+  // Refunds received this month reduce the day they landed on.
+  const dailyRefunds = new Array(daysInMonth).fill(0);
+  returnsFor(r=>{
+    const rd = parseDateStr(r.date);
+    return rd.getFullYear()===year && rd.getMonth()===month;
+  }).forEach(r=>{
+    dailyRefunds[parseDateStr(r.date).getDate()-1] += Number(r.amount||0);
+  });
   const cumulative = []; let running=0;
-  dailyTotals.forEach(v=>{ running+=v; cumulative.push(running); });
+  dailyTotals.forEach((v,i)=>{ running += v - dailyRefunds[i]; cumulative.push(running); });
   const monthTotal = running;
   const budget = budgetForMonth(year, month);
   const now = new Date();
@@ -1090,6 +1266,27 @@ function renderPulse(){
     borderSkipped:false, stack:'day', barPercentage:0.72, categoryPercentage:0.86
   });
 
+  // Refunds render as negative bars below the zero line, so money coming back
+  // reads visually opposite to money going out.
+  const hasRefunds = dailyRefunds.some(v=>v>0);
+  if(hasRefunds){
+    const refundMeta = dailyRefunds.map((amt, idx)=>{
+      if(amt<=0) return null;
+      const dateStr = formatDateStr(new Date(year, month, idx+1));
+      const items = returnsFor(r=>r.date===dateStr);
+      return {amount: amt, items};
+    });
+    datasets.push({
+      label:'_refunds',
+      data: dailyRefunds.map(v=> v>0 ? -v : 0),
+      backgroundColor: cssVar('--good'),
+      _meta: refundMeta,
+      borderSkipped:false, stack:'day', barPercentage:0.72, categoryPercentage:0.86,
+      borderRadius:2
+    });
+  }
+  const maxRefund = Math.max(0, ...dailyRefunds);
+
   const dashboardVisible = document.getElementById('page-dashboard').classList.contains('active');
   if(dashboardVisible){
     const ctx = document.getElementById('pulseChart').getContext('2d');
@@ -1127,7 +1324,8 @@ function renderPulse(){
               // Hide the empty-stub dataset and any zero segments from the tooltip.
               const ds = item.chart.data.datasets[item.datasetIndex];
               if(ds.label==='_empty') return false;
-              return item.parsed.y > 0 && ds._meta && ds._meta[item.dataIndex];
+              if(!ds._meta || !ds._meta[item.dataIndex]) return false;
+              return item.parsed.y !== 0;
             },
             callbacks:{
               title:(items)=>{
@@ -1136,15 +1334,22 @@ function renderPulse(){
               },
               label:(c)=>{
                 const ds = c.chart.data.datasets[c.datasetIndex];
-                const p = ds._meta && ds._meta[c.dataIndex];
-                if(!p) return '';
-                return `${p.description} · ${p.category}: ${formatINR(p.amount)}`;
+                const m = ds._meta && ds._meta[c.dataIndex];
+                if(!m) return '';
+                if(ds.label==='_refunds'){
+                  const names = (m.items||[]).map(r=>{
+                    const orig = findExpenseById(r.expense_id);
+                    return orig ? orig.description : 'refund';
+                  });
+                  return `Refunded: ${formatINR(m.amount)}${names.length ? ' — ' + names.join(', ') : ''}`;
+                }
+                return `${m.description} · ${m.category}: ${formatINR(m.amount)}`;
               },
               afterBody:(items)=>{
                 if(!items.length) return '';
                 const day = Number(items[0].label);
-                const total = dailyTotals[day-1];
-                return `\nDay total: ${formatINR(total)}`;
+                const net = dailyTotals[day-1] - dailyRefunds[day-1];
+                return `\nNet for day: ${formatINR(net)}`;
               }
             }
           }
@@ -1155,8 +1360,10 @@ function renderPulse(){
             ticks:{ color:textMuted, font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:8 }
           },
           y:{
-            stacked:true, beginAtZero:true,
+            stacked:true,
+            beginAtZero: !hasRefunds,
             max: maxDayTotal>0 ? maxDayTotal : undefined,
+            min: hasRefunds ? -maxRefund : undefined,
             grid:{ color:gridColor, drawTicks:false },
             border:{display:false},
             afterBuildTicks: (axis)=>{
@@ -1167,7 +1374,7 @@ function renderPulse(){
                 if(!hasTop) axis.ticks.push({ value: maxDayTotal });
               }
             },
-            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:5, callback:(v)=> v>=1000 ? (Math.round(v/100)/10)+'k' : Math.round(v) }
+            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:5, callback:(v)=> Math.abs(v)>=1000 ? (Math.round(v/100)/10)+'k' : Math.round(v) }
           }
         }
       },
@@ -1200,6 +1407,17 @@ function renderCategoryBreakdown(){
       totals[e.category] = (totals[e.category]||0) + Number(e.amount||0);
     }
   });
+  // Subtract refunds received this month from the category of the original purchase.
+  returnsFor(r=>{
+    const rd = parseDateStr(r.date);
+    return rd.getFullYear()===year && rd.getMonth()===month;
+  }).forEach(r=>{
+    const orig = findExpenseById(r.expense_id);
+    if(!orig) return;
+    totals[orig.category] = (totals[orig.category]||0) - Number(r.amount||0);
+  });
+  // A category fully refunded away shouldn't render as a slice.
+  Object.keys(totals).forEach(k=>{ if(totals[k] <= 0.001) delete totals[k]; });
   const cats = Object.keys(totals).sort((a,b)=>totals[b]-totals[a]);
   const listEl = document.getElementById('catList');
   listEl.innerHTML = '';
@@ -1292,14 +1510,16 @@ function renderSearch(){
     const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short', year:'numeric'});
     row.innerHTML = `
       <div class="entry-left">
-        <span class="entry-desc">${escapeHtml(e.description)}</span>
-        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+        <span class="${descClass(e)}">${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}${returnBadgeHtml(e)}</span>
       </div>
       <div class="entry-right">
-        <span class="entry-amount">${formatINR(e.amount)}</span>
+        ${amountCellHtml(e)}
+        <button class="ret-btn" title="Mark as returned" data-id="${e.id}" data-action="return">↩</button>
         <button class="del-btn" title="Edit" data-id="${e.id}" data-action="edit">✏️</button>
         <button class="del-btn" title="Delete" data-id="${e.id}" data-action="delete">✕</button>
       </div>`;
+    row.querySelector('[data-action="return"]').addEventListener('click', ()=>promptReturn(e.id));
     row.querySelector('[data-action="edit"]').addEventListener('click', ()=>{
       startEdit(e.id);
       selectedDate = e.date;
@@ -1327,11 +1547,11 @@ function renderRecentExpenses(){
     const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short'});
     row.innerHTML = `
       <div class="entry-left">
-        <span class="entry-desc">${escapeHtml(e.description)}</span>
-        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+        <span class="${descClass(e)}">${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}${returnBadgeHtml(e)}</span>
       </div>
       <div class="entry-right">
-        <span class="entry-amount">${formatINR(e.amount)}</span>
+        ${amountCellHtml(e)}
       </div>`;
     list.appendChild(row);
   });
@@ -1344,7 +1564,7 @@ function renderBigExpenses(){
     const d = parseDateStr(e.date);
     return d.getFullYear()===year && d.getMonth()===month;
   });
-  const top = [...inMonth].sort((a,b)=>b.amount-a.amount).slice(0,5);
+  const top = [...inMonth].sort((a,b)=> remainingOn(b)-remainingOn(a)).slice(0,5);
   const list = document.getElementById('bigExpenseList');
   list.innerHTML = '';
   if(top.length===0){
@@ -1358,21 +1578,29 @@ function renderBigExpenses(){
     const dateShort = d.toLocaleDateString('en-IN',{day:'numeric', month:'short'});
     row.innerHTML = `
       <div class="entry-left">
-        <span class="entry-desc">#${i+1} · ${escapeHtml(e.description)}</span>
-        <span class="tag">${escapeHtml(e.category)} · ${dateShort}</span>
+        <span class="${descClass(e)}">#${i+1} · ${escapeHtml(e.description)}</span>
+        <span class="tag">${escapeHtml(e.category)} · ${dateShort}${returnBadgeHtml(e)}</span>
       </div>
       <div class="entry-right">
-        <span class="entry-amount">${formatINR(e.amount)}</span>
+        ${amountCellHtml(e)}
       </div>`;
     list.appendChild(row);
   });
 }
 
 function categorySpendForMonth(category, year, month){
-  return sum(expensesFor(x=>{
+  const spent = sum(expensesFor(x=>{
     const d = parseDateStr(x.date);
     return x.category===category && d.getFullYear()===year && d.getMonth()===month;
   }));
+  // A refund reduces the category of the original purchase, in the month the refund landed.
+  const refunded = sumReturns(returnsFor(r=>{
+    const rd = parseDateStr(r.date);
+    if(rd.getFullYear()!==year || rd.getMonth()!==month) return false;
+    const orig = findExpenseById(r.expense_id);
+    return orig && orig.category === category;
+  }));
+  return spent - refunded;
 }
 
 function renameCategoryEverywhere(oldName, newName){
@@ -1501,12 +1729,91 @@ function renderCategoryBudgets(){  const year = pulseViewMonth.getFullYear(), mo
   });
 }
 
+function renderReturns(){
+  const rets = allReturns();
+  const y = pulseViewMonth.getFullYear(), m = pulseViewMonth.getMonth();
+
+  const monthRefunds = sumReturns(returnsFor(r=>{
+    const rd = parseDateStr(r.date);
+    return rd.getFullYear()===y && rd.getMonth()===m;
+  }));
+  const yearRefunds = sumReturns(returnsFor(r=> parseDateStr(r.date).getFullYear()===y));
+
+  document.getElementById('returnsMonthTotal').textContent = formatINR(monthRefunds);
+  document.getElementById('returnsMonthLabel').textContent = monthLabel(pulseViewMonth);
+  document.getElementById('returnsYearTotal').textContent = formatINR(yearRefunds);
+  document.getElementById('returnsCount').textContent = String(rets.length);
+  document.getElementById('returnsAllTotal').textContent = formatINR(sumReturns(rets));
+
+  // --- Searchable list of expenses that still have something to refund ---
+  const q = (document.getElementById('returnSearchText').value || '').trim().toLowerCase();
+  const returnable = state.expenses
+    .filter(e=> remainingOn(e) > 0.001)
+    .filter(e=> !q || e.description.toLowerCase().includes(q) || e.category.toLowerCase().includes(q))
+    .sort((a,b)=> a.date < b.date ? 1 : -1)
+    .slice(0, q ? 40 : 8);
+
+  const rList = document.getElementById('returnableList');
+  rList.innerHTML = '';
+  if(returnable.length===0){
+    rList.innerHTML = `<div class="empty-state">${q ? 'No matching expenses with an outstanding amount.' : 'No expenses available to return.'}</div>`;
+  }else{
+    returnable.forEach(e=>{
+      const row = document.createElement('div');
+      row.className = 'entry-row';
+      const dateShort = parseDateStr(e.date).toLocaleDateString('en-IN',{day:'numeric', month:'short', year:'numeric'});
+      const partial = returnStatus(e)==='partial';
+      row.innerHTML = `
+        <div class="entry-left">
+          <span class="entry-desc">${escapeHtml(e.description)}</span>
+          <span class="tag">${escapeHtml(e.category)} · ${dateShort}${partial ? ' · part refunded' : ''}</span>
+        </div>
+        <div class="entry-right">
+          <span class="entry-amount">${formatINR(remainingOn(e))}</span>
+          <button class="ret-btn" title="Log a refund for this" data-id="${e.id}">↩</button>
+        </div>`;
+      row.querySelector('.ret-btn').addEventListener('click', ()=>promptReturn(e.id));
+      rList.appendChild(row);
+    });
+  }
+
+  // --- All logged refunds ---
+  const list = document.getElementById('returnsList');
+  list.innerHTML = '';
+  if(rets.length===0){
+    list.innerHTML = '<div class="empty-state">No returns logged yet. Use the ↩ button on any expense to record a refund.</div>';
+    return;
+  }
+  [...rets].sort((a,b)=> a.date < b.date ? 1 : -1).forEach(r=>{
+    const orig = findExpenseById(r.expense_id);
+    const row = document.createElement('div');
+    row.className = 'entry-row';
+    const refundDate = parseDateStr(r.date).toLocaleDateString('en-IN',{day:'numeric', month:'short', year:'numeric'});
+    const origLabel = orig ? escapeHtml(orig.description) : '(original expense deleted)';
+    const origBits = orig
+      ? `${escapeHtml(orig.category)} · bought ${parseDateStr(orig.date).toLocaleDateString('en-IN',{day:'numeric', month:'short'})} for ${formatINR(orig.amount)}`
+      : 'original no longer exists';
+    const noteBit = r.note ? ` · "${escapeHtml(r.note)}"` : '';
+    row.innerHTML = `
+      <div class="entry-left">
+        <span class="entry-desc">${origLabel}</span>
+        <span class="tag">refunded ${refundDate} · ${origBits}${noteBit}</span>
+      </div>
+      <div class="entry-right">
+        <span class="entry-amount" style="color:var(--good);">+${formatINR(r.amount)}</span>
+        <button class="del-btn" title="Remove this refund" data-id="${r.id}">✕</button>
+      </div>`;
+    row.querySelector('.del-btn').addEventListener('click', ()=>deleteReturn(r.id));
+    list.appendChild(row);
+  });
+}
+
 function escapeHtml(s){
   const div = document.createElement('div'); div.textContent = s??''; return div.innerHTML;
 }
 
 /* ---------------- Page routing ---------------- */
-const PAGE_IDS = ['dashboard','add','calendar','search','budgets','library'];
+const PAGE_IDS = ['dashboard','add','calendar','search','returns','budgets','library'];
 let currentPage = 'dashboard';
 
 function applyPage(pageId){
@@ -1618,6 +1925,8 @@ document.getElementById('pulsePrev').addEventListener('click', ()=> navigateMont
 document.getElementById('pulseNext').addEventListener('click', ()=> navigateMonth(1));
 document.getElementById('budgetsPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
 document.getElementById('budgetsNextMonth').addEventListener('click', ()=> navigateMonth(1));
+
+document.getElementById('returnSearchText').addEventListener('input', renderReturns);
 
 document.getElementById('libAddBtn').addEventListener('click', ()=>{
   const name = document.getElementById('libNewName').value;
@@ -1870,6 +2179,7 @@ async function init(){
   document.getElementById('fDate').value = selectedDate;
   const cached = loadCache();
   if(cached) state = cached;
+  if(!Array.isArray(state.returns)) state.returns = [];
   if(!Array.isArray(state.categories) || !state.categories.length){
     state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
   }
