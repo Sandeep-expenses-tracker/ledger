@@ -521,6 +521,10 @@
             <label for="fDesc">Description</label>
             <input type="text" id="fDesc" placeholder="e.g. Auto to office" required>
           </div>
+          <div class="full" id="appliesToWrap" style="display:none;">
+            <label for="fAppliesTo">Counts toward</label>
+            <select id="fAppliesTo"></select>
+          </div>
           <div class="full" style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
             <button type="button" class="btn secondary" id="cancelEditBtn" style="display:none;">Cancel</button>
             <button type="submit" class="btn" id="submitFormBtn">Add expense</button>
@@ -790,6 +794,13 @@
       <input type="number" id="sBudget" class="mono-input" min="0" step="100" inputmode="numeric" placeholder="e.g. 25000">
     </div>
     <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Used for any month you haven't set a specific budget for. To set a budget for a particular month (e.g. this month), use the ✏️ edit link next to the budget bar on the main page instead.</div>
+    <div class="field">
+      <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;margin-bottom:0;">
+        <input type="checkbox" id="sIncomeNextMonth" style="width:auto;margin-top:2px;flex-shrink:0;">
+        <span style="color:var(--text);font-size:13px;">Salary funds the following month</span>
+      </label>
+    </div>
+    <div class="sub" style="margin-top:-4px;margin-bottom:14px;">On by default. Since your salary lands on the last working day of the month but you live off it the month after, income credited on 30 June counts toward July. You can override this per entry when adding income.</div>
     <div class="modal-msg" id="modalMsg"></div>
     <div class="modal-actions">
       <button class="btn" id="saveSettingsBtn">Save &amp; connect</button>
@@ -854,7 +865,7 @@ const CATEGORY_COLORS = new Proxy({}, {
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [], returns: [], income: [], savings: [], income_sources: [...DEFAULT_INCOME_SOURCES], savings_destinations: [...DEFAULT_SAVINGS_DESTINATIONS] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [], returns: [], income: [], savings: [], income_sources: [...DEFAULT_INCOME_SOURCES], savings_destinations: [...DEFAULT_SAVINGS_DESTINATIONS], income_funds_next_month: true };
 
 let selectedDate = formatDateStr(new Date());
 let weekViewDate = new Date(); // controls which week the widget shows
@@ -942,6 +953,7 @@ async function githubLoad(){
     state.savings = Array.isArray(parsed.savings) ? parsed.savings : [];
     if(Array.isArray(parsed.income_sources) && parsed.income_sources.length) state.income_sources = parsed.income_sources;
     if(Array.isArray(parsed.savings_destinations) && parsed.savings_destinations.length) state.savings_destinations = parsed.savings_destinations;
+    if(typeof parsed.income_funds_next_month === 'boolean') state.income_funds_next_month = parsed.income_funds_next_month;
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -1052,16 +1064,17 @@ function deleteReturn(returnId){
 function makeId(prefix){
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 }
-function addIncome(date, amount, source, description){
+function addIncome(date, amount, source, description, appliesTo){
   allIncome();
-  state.income.push({ id: makeId('i'), date, amount: Number(amount), source, description });
+  state.income.push({ id: makeId('i'), date, amount: Number(amount), source, description, applies_to: appliesTo || null });
   state.income.sort((a,b)=> a.date < b.date ? 1 : -1);
   githubSave();
 }
-function updateIncome(id, date, amount, source, description){
+function updateIncome(id, date, amount, source, description, appliesTo){
   const entry = allIncome().find(x=>x.id===id);
   if(!entry) return;
   entry.date = date; entry.amount = Number(amount); entry.source = source; entry.description = description;
+  entry.applies_to = appliesTo || null;
   state.income.sort((a,b)=> a.date < b.date ? 1 : -1);
   githubSave();
 }
@@ -1184,8 +1197,33 @@ function inMonthOf(dateStr, year, month){
   const d = parseDateStr(dateStr);
   return d.getFullYear()===year && d.getMonth()===month;
 }
+
+/* Salary usually lands on the last working day of a month but funds the *next*
+   month's spending. So income is bucketed by the month it funds, not the month
+   it was credited. Each entry can override this via `applies_to` ('YYYY-MM'). */
+function incomeEffectiveMonth(entry){
+  if(entry.applies_to && /^\d{4}-\d{2}$/.test(entry.applies_to)){
+    const [y, m] = entry.applies_to.split('-').map(Number);
+    return { year: y, month: m - 1 };
+  }
+  const d = parseDateStr(entry.date);
+  if(state.income_funds_next_month){
+    const shifted = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    return { year: shifted.getFullYear(), month: shifted.getMonth() };
+  }
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+function incomeAppliesTo(entry, year, month){
+  const eff = incomeEffectiveMonth(entry);
+  return eff.year===year && eff.month===month;
+}
+function incomeEffectiveLabel(entry){
+  const eff = incomeEffectiveMonth(entry);
+  return new Date(eff.year, eff.month, 1).toLocaleDateString('en-IN',{month:'long', year:'numeric'});
+}
+
 function incomeForMonth(year, month){
-  return sum(allIncome().filter(i=> inMonthOf(i.date, year, month)));
+  return sum(allIncome().filter(i=> incomeAppliesTo(i, year, month)));
 }
 function savingsForMonth(year, month){
   return sum(allSavings().filter(s=> inMonthOf(s.date, year, month)));
@@ -1197,7 +1235,7 @@ function leftoverForMonth(year, month){
   return incomeForMonth(year, month) - spentForMonth(year, month);
 }
 function incomeForYear(year){
-  return sum(allIncome().filter(i=> parseDateStr(i.date).getFullYear()===year));
+  return sum(allIncome().filter(i=> incomeEffectiveMonth(i).year === year));
 }
 function savingsForYear(year){
   return sum(allSavings().filter(s=> parseDateStr(s.date).getFullYear()===year));
@@ -2069,7 +2107,7 @@ function renderCashflow(){
   }
 
   // --- Income list ---
-  const incomeEntries = allIncome().filter(i=> inMonthOf(i.date, year, month))
+  const incomeEntries = allIncome().filter(i=> incomeAppliesTo(i, year, month))
     .sort((a,b)=> a.date < b.date ? 1 : -1);
   setText('incomeMonthTotal', formatINR(earned));
   const incList = document.getElementById('incomeList');
@@ -2081,11 +2119,11 @@ function renderCashflow(){
       incomeEntries.forEach(i=>{
         const row = document.createElement('div');
         row.className = 'entry-row';
-        const dateShort = parseDateStr(i.date).toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+        const creditedOn = parseDateStr(i.date).toLocaleDateString('en-IN',{day:'numeric', month:'short', year:'numeric'});
         row.innerHTML = `
           <div class="entry-left">
             <span class="entry-desc">${escapeHtml(i.description)}</span>
-            <span class="tag">${escapeHtml(i.source||'Other')} · ${dateShort}</span>
+            <span class="tag">${escapeHtml(i.source||'Other')} · credited ${creditedOn}</span>
           </div>
           <div class="entry-right">
             <span class="entry-amount" style="color:var(--good);">+${formatINR(i.amount)}</span>
@@ -2236,6 +2274,37 @@ const TYPE_CONFIG = {
              hint:'Set aside is tracked separately. If the money also left your account, log it as an expense too — this figure is just to show how much of your outflow was productive.' }
 };
 
+function monthKeyOf(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; }
+
+function refreshAppliesToOptions(){
+  const wrap = document.getElementById('appliesToWrap');
+  const sel = document.getElementById('fAppliesTo');
+  if(!wrap || !sel) return;
+  if(entryType !== 'income'){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const dateVal = document.getElementById('fDate').value || formatDateStr(new Date());
+  const d = parseDateStr(dateVal);
+  const sameMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  const nextMonth = new Date(d.getFullYear(), d.getMonth()+1, 1);
+  const fmt = (x)=> x.toLocaleDateString('en-IN',{month:'long', year:'numeric'});
+
+  const previous = sel.value;
+  sel.innerHTML = '';
+  const opts = [
+    { value: monthKeyOf(nextMonth), label: `${fmt(nextMonth)} — the month this money funds` },
+    { value: monthKeyOf(sameMonth), label: `${fmt(sameMonth)} — the month it was credited` }
+  ];
+  // Default order follows the global setting, so the top option is the usual case.
+  if(!state.income_funds_next_month) opts.reverse();
+  opts.forEach(o=>{
+    const opt = document.createElement('option');
+    opt.value = o.value; opt.textContent = o.label;
+    sel.appendChild(opt);
+  });
+  if(previous && opts.some(o=>o.value===previous)) sel.value = previous;
+}
+
 function applyEntryType(type){
   entryType = type;
   const cfg = TYPE_CONFIG[type];
@@ -2246,6 +2315,7 @@ function applyEntryType(type){
   document.getElementById('submitFormBtn').textContent = editingId ? 'Save changes' : cfg.submit;
   document.getElementById('addTypeHint').textContent = cfg.hint;
   populateCategorySelects();
+  refreshAppliesToOptions();
 }
 
 function startEdit(id, type){
@@ -2262,6 +2332,11 @@ function startEdit(id, type){
   document.getElementById('fAmount').value = entry.amount;
   document.getElementById('fCategory').value = selectValue;
   document.getElementById('fDesc').value = entry.description;
+  if(type==='income'){
+    refreshAppliesToOptions();
+    const eff = incomeEffectiveMonth(entry);
+    document.getElementById('fAppliesTo').value = `${eff.year}-${pad2(eff.month+1)}`;
+  }
   document.getElementById('submitFormBtn').textContent = 'Save changes';
   document.getElementById('cancelEditBtn').style.display = 'inline-block';
   document.getElementById('addFormTitle').textContent = TYPE_CONFIG[type].editTitle;
@@ -2290,6 +2365,8 @@ document.querySelectorAll('.type-btn').forEach(btn=>{
     applyEntryType(btn.dataset.type);
   });
 });
+
+document.getElementById('fDate').addEventListener('change', refreshAppliesToOptions);
 
 document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
 
@@ -2320,13 +2397,15 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
   const type = wasEditing ? editingType : entryType;
 
   if(wasEditing){
+    const appliesTo = type==='income' ? document.getElementById('fAppliesTo').value : null;
     if(type==='expense') updateExpense(editingId, date, amount, description, choice);
-    else if(type==='income') updateIncome(editingId, date, amount, choice, description);
+    else if(type==='income') updateIncome(editingId, date, amount, choice, description, appliesTo);
     else updateSaving(editingId, date, amount, choice, description);
     cancelEdit();
   }else{
+    const appliesTo = type==='income' ? document.getElementById('fAppliesTo').value : null;
     if(type==='expense') addExpense(date, amount, description, choice);
-    else if(type==='income') addIncome(date, amount, choice, description);
+    else if(type==='income') addIncome(date, amount, choice, description, appliesTo);
     else addSaving(date, amount, choice, description);
   }
 
@@ -2444,6 +2523,7 @@ function openSettings(){
   document.getElementById('sPath').value = settings.path||'data.json';
   document.getElementById('sToken').value = settings.token||'';
   document.getElementById('sBudget').value = state.monthly_budget||'';
+  document.getElementById('sIncomeNextMonth').checked = state.income_funds_next_month !== false;
   document.getElementById('modalMsg').textContent='';
   document.getElementById('settingsBackdrop').classList.add('show');
 }
@@ -2457,6 +2537,7 @@ async function onSaveSettings(){
   settings.path = document.getElementById('sPath').value.trim() || 'data.json';
   settings.token = document.getElementById('sToken').value.trim();
   const newDefaultBudget = Number(document.getElementById('sBudget').value) || 0;
+  const newIncomeNextMonth = document.getElementById('sIncomeNextMonth').checked;
 
   if(!settings.owner || !settings.repo || !settings.token){
     msg.textContent = 'Username, repository and token are required.';
@@ -2471,6 +2552,7 @@ async function onSaveSettings(){
   // githubLoad() may pull an older budget value down from GitHub — reapply what
   // was just entered here so it isn't silently overwritten by the remote copy.
   state.monthly_budget = newDefaultBudget;
+  state.income_funds_next_month = newIncomeNextMonth;
   await githubSave();
   msg.textContent = 'Connected and synced.';
   msg.className = 'modal-msg ok';
@@ -2622,6 +2704,7 @@ async function init(){
   if(!Array.isArray(state.savings)) state.savings = [];
   if(!Array.isArray(state.income_sources) || !state.income_sources.length) state.income_sources = [...DEFAULT_INCOME_SOURCES];
   if(!Array.isArray(state.savings_destinations) || !state.savings_destinations.length) state.savings_destinations = [...DEFAULT_SAVINGS_DESTINATIONS];
+  if(typeof state.income_funds_next_month !== 'boolean') state.income_funds_next_month = true;
   if(!Array.isArray(state.categories) || !state.categories.length){
     state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
   }
