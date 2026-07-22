@@ -300,6 +300,21 @@
   .ret-btn:hover{color:var(--good);background:var(--good-soft);}
   .figure-value.good, .amt.good{color:var(--good);}
 
+  /* Cashflow */
+  .cash-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  @media (max-width:860px){.cash-grid{grid-template-columns:repeat(2,1fr);}}
+  @media (max-width:460px){.cash-grid{grid-template-columns:1fr;}}
+  .amt.negative{color:var(--alert);}
+
+  /* Entry type toggle on the Add page */
+  .type-toggle{display:flex;gap:6px;margin-bottom:18px;background:var(--surface-2);padding:4px;border-radius:var(--radius-sm);border:1px solid var(--border);}
+  .type-btn{
+    flex:1;background:none;border:none;color:var(--text-muted);padding:9px 8px;border-radius:6px;
+    font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;transition:background-color .15s, color .15s;
+  }
+  .type-btn:hover{color:var(--text);}
+  .type-btn.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,0.12);}
+
   /* Modal */
   .modal-backdrop{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;
@@ -365,6 +380,7 @@
     <button class="nav-btn" data-page="add">Add expense</button>
     <button class="nav-btn" data-page="calendar">Calendar</button>
     <button class="nav-btn" data-page="search">Search</button>
+    <button class="nav-btn" data-page="cashflow">Cashflow</button>
     <button class="nav-btn" data-page="returns">Returns</button>
     <button class="nav-btn" data-page="budgets">Budgets</button>
     <button class="nav-btn" data-page="library">Library</button>
@@ -403,6 +419,28 @@
           <span class="val" id="budgetVal">₹0 of ₹0</span>
         </div>
         <div class="bar-track"><div class="bar-fill" id="budgetBar" style="width:0%;background:var(--good);"></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Cashflow — <span id="dashCashMonthLabel" class="mono">this month</span></h3>
+      <div class="cash-grid">
+        <div class="total-card">
+          <div class="lbl">Earned</div>
+          <div class="amt mono good" id="dashEarned">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Spent</div>
+          <div class="amt mono" id="dashSpent" style="color:var(--accent);">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Left over</div>
+          <div class="amt mono" id="dashLeftover">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Set aside</div>
+          <div class="amt mono" id="dashSetAside" style="color:var(--good);">₹0</div>
+        </div>
       </div>
     </div>
 
@@ -459,7 +497,12 @@
   <!-- ================= ADD EXPENSE ================= -->
   <section class="page" id="page-add">
     <div class="card" style="max-width:560px;margin:0 auto;">
-      <h3 id="addFormTitle">Add an expense</h3>
+      <h3 id="addFormTitle">Add an entry</h3>
+      <div class="type-toggle" id="typeToggle">
+        <button type="button" class="type-btn active" data-type="expense">− Expense</button>
+        <button type="button" class="type-btn" data-type="income">+ Income</button>
+        <button type="button" class="type-btn" data-type="savings">◆ Savings</button>
+      </div>
       <form id="addForm">
         <div class="form-grid">
           <div>
@@ -471,7 +514,7 @@
             <input type="number" id="fAmount" class="mono-input" min="0" step="0.01" inputmode="decimal" placeholder="0.00" required>
           </div>
           <div>
-            <label for="fCategory">Category</label>
+            <label for="fCategory" id="fCategoryLabel">Category</label>
             <select id="fCategory"></select>
           </div>
           <div>
@@ -485,6 +528,7 @@
         </div>
       </form>
       <div class="modal-msg ok" id="addSuccessMsg" style="text-align:center;"></div>
+      <div class="sub" id="addTypeHint" style="margin-top:12px;text-align:center;"></div>
     </div>
   </section>
 
@@ -573,6 +617,73 @@
       <h3>Category budgets</h3>
       <div class="sub" style="margin-top:-8px;margin-bottom:14px;">Set a cap per category — leave blank for no limit. These track against the month selected above.</div>
       <div id="catBudgetList"></div>
+    </div>
+  </section>
+
+  <!-- ================= CASHFLOW ================= -->
+  <section class="page" id="page-cashflow">
+    <div class="card">
+      <div class="cal-head">
+        <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="cashPrevMonth">‹</button>
+        <span class="cal-title mono" id="cashMonthLabel">—</span>
+        <button class="icon-btn" style="width:30px;height:30px;font-size:13px;" id="cashNextMonth">›</button>
+      </div>
+      <div class="cash-grid" style="margin-top:16px;">
+        <div class="total-card">
+          <div class="lbl">Earned</div>
+          <div class="amt mono good" id="cashEarned">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Spent</div>
+          <div class="amt mono" id="cashSpent" style="color:var(--accent);">₹0</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Left over</div>
+          <div class="amt mono" id="cashLeftover">₹0</div>
+          <div class="cat-budget-spend" id="cashLeftoverHint">—</div>
+        </div>
+        <div class="total-card">
+          <div class="lbl">Set aside</div>
+          <div class="amt mono" id="cashSetAside" style="color:var(--good);">₹0</div>
+          <div class="cat-budget-spend">into savings &amp; investments</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="budget-row">
+          <span>Share of income spent</span>
+          <span class="val" id="cashRatioLabel">—</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="cashRatioBar" style="width:0%;background:var(--good);"></div></div>
+      </div>
+      <div class="sub" style="margin-top:12px;">Each month stands on its own — nothing carries over from the previous month. "Left over" can go negative if you spent more than you earned. Money you set aside is also counted in "Spent", since it left your account.</div>
+    </div>
+
+    <div class="split-row">
+      <div class="card">
+        <div class="entries-head">
+          <span class="date-label">Income this month</span>
+          <span class="day-total mono good" id="incomeMonthTotal">₹0</span>
+        </div>
+        <div id="incomeList"></div>
+        <div style="margin-top:14px;text-align:right;">
+          <button type="button" class="btn secondary" data-addtype="income" style="padding:8px 14px;font-size:13px;">+ Add income</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="entries-head">
+          <span class="date-label">Set aside this month</span>
+          <span class="day-total mono good" id="savingsMonthTotal">₹0</span>
+        </div>
+        <div id="savingsList"></div>
+        <div style="margin-top:14px;text-align:right;">
+          <button type="button" class="btn secondary" data-addtype="savings" style="padding:8px 14px;font-size:13px;">+ Add savings</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Year overview — <span id="cashYearLabel" class="mono">—</span></h3>
+      <canvas id="cashflowChart" height="220"></canvas>
     </div>
   </section>
 
@@ -727,6 +838,8 @@ const DEFAULT_CATEGORIES = [
   {name:'Gifts & Donations', color:'#D4B45C'},
   {name:'Other', color:'#8B949E'}
 ];
+const DEFAULT_INCOME_SOURCES = ['Salary','Freelance','Business','Interest / Dividends','Rental','Bonus','Gift','Reimbursement','Other'];
+const DEFAULT_SAVINGS_DESTINATIONS = ['Emergency Fund','Mutual Fund / SIP','Fixed Deposit','Recurring Deposit','Gold','Stocks','PPF / EPF','Other'];
 const PALETTE = ['#D4A24C','#7FA6A8','#8FB35C','#5CA0B3','#8B93C7','#6E7FD4','#C4574B','#4C9A6A','#C77FA6','#D48AB0','#B784C7','#D48A5E','#A98BC7','#6E8FB0','#B25C5C','#5CA36B','#D4B45C','#8B949E','#B39664','#7BA05F','#65A0B0','#B08265','#9B7BC0','#7BC08B'];
 
 // Legacy CATEGORY_COLORS getter that reads from state.categories for backward compat with the rest of the app.
@@ -741,15 +854,17 @@ const CATEGORY_COLORS = new Proxy({}, {
 
 let settings = loadSettings();
 let fileSha = null;
-let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [], returns: [] };
+let state = { monthly_budget: settings.monthly_budget || 0, monthly_budgets: {}, category_budgets: {}, categories: DEFAULT_CATEGORIES.map(c=>({...c})), expenses: [], returns: [], income: [], savings: [], income_sources: [...DEFAULT_INCOME_SOURCES], savings_destinations: [...DEFAULT_SAVINGS_DESTINATIONS] };
 
 let selectedDate = formatDateStr(new Date());
 let weekViewDate = new Date(); // controls which week the widget shows
 let editingId = null;
+let editingType = null;
+let entryType = 'expense';
 let calViewMonth = new Date(); calViewMonth.setDate(1);
 let pulseViewMonth = new Date(); pulseViewMonth.setDate(1);
 
-let pulseChart = null, catChart = null;
+let pulseChart = null, catChart = null, cashflowChart = null;
 let wrappedYear = new Date().getFullYear();
 
 function loadSettings(){
@@ -823,6 +938,10 @@ async function githubLoad(){
     if(Array.isArray(parsed.categories) && parsed.categories.length) state.categories = parsed.categories;
     else if(!state.categories || !state.categories.length) state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
     state.returns = Array.isArray(parsed.returns) ? parsed.returns : [];
+    state.income = Array.isArray(parsed.income) ? parsed.income : [];
+    state.savings = Array.isArray(parsed.savings) ? parsed.savings : [];
+    if(Array.isArray(parsed.income_sources) && parsed.income_sources.length) state.income_sources = parsed.income_sources;
+    if(Array.isArray(parsed.savings_destinations) && parsed.savings_destinations.length) state.savings_destinations = parsed.savings_destinations;
     saveCache();
     setSyncStatus('ok', 'Connected');
   }catch(err){
@@ -929,6 +1048,54 @@ function deleteReturn(returnId){
   renderAll();
 }
 
+/* ---------------- Income & savings entries ---------------- */
+function makeId(prefix){
+  return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+function addIncome(date, amount, source, description){
+  allIncome();
+  state.income.push({ id: makeId('i'), date, amount: Number(amount), source, description });
+  state.income.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+}
+function updateIncome(id, date, amount, source, description){
+  const entry = allIncome().find(x=>x.id===id);
+  if(!entry) return;
+  entry.date = date; entry.amount = Number(amount); entry.source = source; entry.description = description;
+  state.income.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+}
+function deleteIncome(id){
+  const entry = allIncome().find(x=>x.id===id);
+  if(!entry) return;
+  if(!window.confirm(`Delete income "${entry.description}" (${formatINR(entry.amount)})? This can't be undone.`)) return;
+  state.income = allIncome().filter(x=>x.id!==id);
+  githubSave();
+  renderAll();
+}
+
+function addSaving(date, amount, destination, description){
+  allSavings();
+  state.savings.push({ id: makeId('s'), date, amount: Number(amount), destination, description });
+  state.savings.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+}
+function updateSaving(id, date, amount, destination, description){
+  const entry = allSavings().find(x=>x.id===id);
+  if(!entry) return;
+  entry.date = date; entry.amount = Number(amount); entry.destination = destination; entry.description = description;
+  state.savings.sort((a,b)=> a.date < b.date ? 1 : -1);
+  githubSave();
+}
+function deleteSaving(id){
+  const entry = allSavings().find(x=>x.id===id);
+  if(!entry) return;
+  if(!window.confirm(`Delete savings entry "${entry.description}" (${formatINR(entry.amount)})? This can't be undone.`)) return;
+  state.savings = allSavings().filter(x=>x.id!==id);
+  githubSave();
+  renderAll();
+}
+
 function promptReturn(expenseId){
   const expense = findExpenseById(expenseId);
   if(!expense) return;
@@ -1005,6 +1172,37 @@ function dayTotalFor(dateStr){
   return spent - refunded;
 }
 
+/* ---------------- Income / savings / cashflow ----------------
+   Months stand alone: nothing carries forward from one month to the next.
+   "Left over" = earned − spent, and is allowed to go negative.
+   "Set aside" is tracked separately and is informational — money moved into
+   savings is still counted as spending, so it never double-counts. */
+function allIncome(){ return Array.isArray(state.income) ? state.income : []; }
+function allSavings(){ return Array.isArray(state.savings) ? state.savings : []; }
+
+function inMonthOf(dateStr, year, month){
+  const d = parseDateStr(dateStr);
+  return d.getFullYear()===year && d.getMonth()===month;
+}
+function incomeForMonth(year, month){
+  return sum(allIncome().filter(i=> inMonthOf(i.date, year, month)));
+}
+function savingsForMonth(year, month){
+  return sum(allSavings().filter(s=> inMonthOf(s.date, year, month)));
+}
+function spentForMonth(year, month){
+  return monthTotalFor(formatDateStr(new Date(year, month, 1)));
+}
+function leftoverForMonth(year, month){
+  return incomeForMonth(year, month) - spentForMonth(year, month);
+}
+function incomeForYear(year){
+  return sum(allIncome().filter(i=> parseDateStr(i.date).getFullYear()===year));
+}
+function savingsForYear(year){
+  return sum(allSavings().filter(s=> parseDateStr(s.date).getFullYear()===year));
+}
+
 function pad2(n){ return String(n).padStart(2,'0'); }
 function monthKey(year, month){ return `${year}-${pad2(month+1)}`; }
 function budgetForMonth(year, month){
@@ -1033,6 +1231,7 @@ function renderAll(){
   renderRecentExpenses();
   renderLibrary();
   renderReturns();
+  renderCashflow();
 }
 
 function renderTotals(){
@@ -1446,19 +1645,30 @@ function renderCategoryBreakdown(){
   }
 }
 
+function allIncomeSources(){
+  return (Array.isArray(state.income_sources) && state.income_sources.length) ? state.income_sources : DEFAULT_INCOME_SOURCES;
+}
+function allSavingsDestinations(){
+  return (Array.isArray(state.savings_destinations) && state.savings_destinations.length) ? state.savings_destinations : DEFAULT_SAVINGS_DESTINATIONS;
+}
+
 function populateCategorySelects(){
-  // Add form
+  // Add form — options depend on which entry type is selected
   const addSel = document.getElementById('fCategory');
   if(addSel){
     const currentAdd = addSel.value;
+    let options;
+    if(entryType === 'income') options = allIncomeSources();
+    else if(entryType === 'savings') options = allSavingsDestinations();
+    else options = state.categories.map(c=>c.name);
     addSel.innerHTML = '';
-    state.categories.forEach(cat=>{
+    options.forEach(name=>{
       const opt = document.createElement('option');
-      opt.value = cat.name; opt.textContent = cat.name;
+      opt.value = name; opt.textContent = name;
       addSel.appendChild(opt);
     });
-    // preserve current selection if still valid
-    if(currentAdd && state.categories.some(c=>c.name===currentAdd)) addSel.value = currentAdd;
+    // preserve current selection if still valid for this type
+    if(currentAdd && options.includes(currentAdd)) addSel.value = currentAdd;
   }
   // Search filter
   const searchSel = document.getElementById('searchCategory');
@@ -1808,12 +2018,173 @@ function renderReturns(){
   });
 }
 
+function renderCashflow(){
+  const year = pulseViewMonth.getFullYear(), month = pulseViewMonth.getMonth();
+  const earned = incomeForMonth(year, month);
+  const spent = spentForMonth(year, month);
+  const leftover = earned - spent;
+  const setAside = savingsForMonth(year, month);
+
+  const setText = (id, val)=>{ const el = document.getElementById(id); if(el) el.textContent = val; };
+
+  setText('cashMonthLabel', monthLabel(pulseViewMonth));
+  setText('dashCashMonthLabel', monthLabel(pulseViewMonth));
+  setText('cashYearLabel', String(year));
+  setText('cashEarned', formatINR(earned));
+  setText('cashSpent', formatINR(spent));
+  setText('cashSetAside', formatINR(setAside));
+  setText('dashEarned', formatINR(earned));
+  setText('dashSpent', formatINR(spent));
+  setText('dashSetAside', formatINR(setAside));
+
+  // Left over is allowed to go negative — show it plainly rather than clamping.
+  [['cashLeftover','cashLeftoverHint'], ['dashLeftover', null]].forEach(([amtId, hintId])=>{
+    const el = document.getElementById(amtId);
+    if(!el) return;
+    el.textContent = (leftover < 0 ? '−' : '') + formatINR(Math.abs(leftover));
+    el.className = 'amt mono ' + (leftover < 0 ? 'negative' : 'good');
+    if(hintId){
+      const hint = document.getElementById(hintId);
+      if(hint){
+        if(earned <= 0 && spent <= 0) hint.textContent = 'nothing logged yet';
+        else if(earned <= 0) hint.textContent = 'no income logged this month';
+        else hint.textContent = leftover < 0 ? 'overspent this month' : 'still in hand';
+      }
+    }
+  });
+
+  // Share of income spent
+  const ratioLabel = document.getElementById('cashRatioLabel');
+  const ratioBar = document.getElementById('cashRatioBar');
+  if(ratioLabel && ratioBar){
+    if(earned > 0){
+      const pct = (spent / earned) * 100;
+      ratioLabel.textContent = `${Math.round(pct)}% — ${formatINR(spent)} of ${formatINR(earned)}`;
+      ratioBar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+      ratioBar.style.background = pct > 100 ? 'var(--alert)' : (pct > 85 ? 'var(--accent)' : 'var(--good)');
+    }else{
+      ratioLabel.textContent = 'no income logged for this month';
+      ratioBar.style.width = '0%';
+    }
+  }
+
+  // --- Income list ---
+  const incomeEntries = allIncome().filter(i=> inMonthOf(i.date, year, month))
+    .sort((a,b)=> a.date < b.date ? 1 : -1);
+  setText('incomeMonthTotal', formatINR(earned));
+  const incList = document.getElementById('incomeList');
+  if(incList){
+    incList.innerHTML = '';
+    if(incomeEntries.length===0){
+      incList.innerHTML = '<div class="empty-state">No income logged for this month.</div>';
+    }else{
+      incomeEntries.forEach(i=>{
+        const row = document.createElement('div');
+        row.className = 'entry-row';
+        const dateShort = parseDateStr(i.date).toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+        row.innerHTML = `
+          <div class="entry-left">
+            <span class="entry-desc">${escapeHtml(i.description)}</span>
+            <span class="tag">${escapeHtml(i.source||'Other')} · ${dateShort}</span>
+          </div>
+          <div class="entry-right">
+            <span class="entry-amount" style="color:var(--good);">+${formatINR(i.amount)}</span>
+            <button class="del-btn" title="Edit" data-act="edit">✏️</button>
+            <button class="del-btn" title="Delete" data-act="del">✕</button>
+          </div>`;
+        row.querySelector('[data-act="edit"]').addEventListener('click', ()=>startEdit(i.id, 'income'));
+        row.querySelector('[data-act="del"]').addEventListener('click', ()=>deleteIncome(i.id));
+        incList.appendChild(row);
+      });
+    }
+  }
+
+  // --- Savings list ---
+  const savingEntries = allSavings().filter(s=> inMonthOf(s.date, year, month))
+    .sort((a,b)=> a.date < b.date ? 1 : -1);
+  setText('savingsMonthTotal', formatINR(setAside));
+  const savList = document.getElementById('savingsList');
+  if(savList){
+    savList.innerHTML = '';
+    if(savingEntries.length===0){
+      savList.innerHTML = '<div class="empty-state">Nothing set aside this month.</div>';
+    }else{
+      savingEntries.forEach(s=>{
+        const row = document.createElement('div');
+        row.className = 'entry-row';
+        const dateShort = parseDateStr(s.date).toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+        row.innerHTML = `
+          <div class="entry-left">
+            <span class="entry-desc">${escapeHtml(s.description)}</span>
+            <span class="tag">${escapeHtml(s.destination||'Other')} · ${dateShort}</span>
+          </div>
+          <div class="entry-right">
+            <span class="entry-amount" style="color:var(--good);">${formatINR(s.amount)}</span>
+            <button class="del-btn" title="Edit" data-act="edit">✏️</button>
+            <button class="del-btn" title="Delete" data-act="del">✕</button>
+          </div>`;
+        row.querySelector('[data-act="edit"]').addEventListener('click', ()=>startEdit(s.id, 'savings'));
+        row.querySelector('[data-act="del"]').addEventListener('click', ()=>deleteSaving(s.id));
+        savList.appendChild(row);
+      });
+    }
+  }
+
+  renderCashflowChart(year);
+}
+
+function renderCashflowChart(year){
+  const canvas = document.getElementById('cashflowChart');
+  if(!canvas) return;
+  const visible = document.getElementById('page-cashflow').classList.contains('active');
+  if(!visible){
+    if(cashflowChart){ cashflowChart.destroy(); cashflowChart = null; }
+    return;
+  }
+  const months = Array.from({length:12}, (_,m)=>m);
+  const earnedData = months.map(m=> incomeForMonth(year, m));
+  const spentData  = months.map(m=> spentForMonth(year, m));
+  const leftData   = months.map(m=> earnedData[m] - spentData[m]);
+  const labels = months.map(m=> new Date(year, m, 1).toLocaleDateString('en-IN',{month:'short'}));
+
+  const gridColor = cssVar('--border');
+  const textMuted = cssVar('--text-muted');
+  const goodColor = cssVar('--good');
+  const accentColor = cssVar('--accent');
+  const alertColor = cssVar('--alert');
+
+  if(cashflowChart) cashflowChart.destroy();
+  cashflowChart = new Chart(canvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      { label:'Earned', data:earnedData, backgroundColor:goodColor, borderRadius:3, barPercentage:0.8, categoryPercentage:0.7 },
+      { label:'Spent',  data:spentData,  backgroundColor:accentColor, borderRadius:3, barPercentage:0.8, categoryPercentage:0.7 },
+      { label:'Left over', data:leftData, type:'line', borderColor:alertColor, backgroundColor:alertColor,
+        borderWidth:2, pointRadius:3, tension:0.25, fill:false }
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:400 },
+      plugins:{
+        legend:{ display:true, position:'bottom', labels:{ color:textMuted, font:{size:11}, boxWidth:12, padding:14 } },
+        tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${formatINR(c.parsed.y)}` } }
+      },
+      scales:{
+        x:{ grid:{display:false}, ticks:{ color:textMuted, font:{size:10} } },
+        y:{ grid:{ color:gridColor, drawTicks:false }, border:{display:false},
+            ticks:{ color:textMuted, font:{size:10}, maxTicksLimit:5,
+                    callback:(v)=> Math.abs(v)>=1000 ? (Math.round(v/100)/10)+'k' : Math.round(v) } }
+      }
+    }
+  });
+}
+
 function escapeHtml(s){
   const div = document.createElement('div'); div.textContent = s??''; return div.innerHTML;
 }
 
 /* ---------------- Page routing ---------------- */
-const PAGE_IDS = ['dashboard','add','calendar','search','returns','budgets','library'];
+const PAGE_IDS = ['dashboard','add','calendar','search','cashflow','returns','budgets','library'];
 let currentPage = 'dashboard';
 
 function applyPage(pageId){
@@ -1828,6 +2199,7 @@ function applyPage(pageId){
   currentPage = pageId;
   // charts need a visible container to size themselves correctly — rebuild on show
   if(pageId==='dashboard'){ renderPulse(); renderCategoryBreakdown(); }
+  if(pageId==='cashflow'){ renderCashflow(); }
 }
 function goToPage(pageId){
   if(location.hash.replace('#','') === pageId){ applyPage(pageId); }
@@ -1847,55 +2219,115 @@ function navigateMonth(delta){
   renderCategoryBreakdown();
   renderBigExpenses();
   renderCategoryBudgets();
+  renderCashflow();
+  renderReturns();
 }
 
 /* ---------------- Events ---------------- */
-function startEdit(id){
-  const entry = state.expenses.find(e=>e.id===id);
+const TYPE_CONFIG = {
+  expense: { title:'Add an expense',  editTitle:'Edit expense',  submit:'Add expense',  selectLabel:'Category',
+             placeholder:'e.g. Auto to office',
+             hint:'Expenses reduce what you have left over for the month.' },
+  income:  { title:'Add income',      editTitle:'Edit income',   submit:'Add income',   selectLabel:'Source',
+             placeholder:'e.g. July salary',
+             hint:'Income is what you earned this month. Left over = earned − spent.' },
+  savings: { title:'Add savings',     editTitle:'Edit savings',  submit:'Add savings',  selectLabel:'Destination',
+             placeholder:'e.g. Monthly SIP',
+             hint:'Set aside is tracked separately. If the money also left your account, log it as an expense too — this figure is just to show how much of your outflow was productive.' }
+};
+
+function applyEntryType(type){
+  entryType = type;
+  const cfg = TYPE_CONFIG[type];
+  document.querySelectorAll('.type-btn').forEach(b=> b.classList.toggle('active', b.dataset.type===type));
+  document.getElementById('fCategoryLabel').textContent = cfg.selectLabel;
+  document.getElementById('fDesc').placeholder = cfg.placeholder;
+  document.getElementById('addFormTitle').textContent = editingId ? cfg.editTitle : cfg.title;
+  document.getElementById('submitFormBtn').textContent = editingId ? 'Save changes' : cfg.submit;
+  document.getElementById('addTypeHint').textContent = cfg.hint;
+  populateCategorySelects();
+}
+
+function startEdit(id, type){
+  type = type || 'expense';
+  let entry, selectValue;
+  if(type==='expense'){ entry = state.expenses.find(e=>e.id===id); selectValue = entry && entry.category; }
+  else if(type==='income'){ entry = allIncome().find(e=>e.id===id); selectValue = entry && entry.source; }
+  else { entry = allSavings().find(e=>e.id===id); selectValue = entry && entry.destination; }
   if(!entry) return;
   editingId = id;
+  editingType = type;
+  applyEntryType(type);
   document.getElementById('fDate').value = entry.date;
   document.getElementById('fAmount').value = entry.amount;
-  document.getElementById('fCategory').value = entry.category;
+  document.getElementById('fCategory').value = selectValue;
   document.getElementById('fDesc').value = entry.description;
   document.getElementById('submitFormBtn').textContent = 'Save changes';
   document.getElementById('cancelEditBtn').style.display = 'inline-block';
-  document.getElementById('addFormTitle').textContent = 'Edit expense';
+  document.getElementById('addFormTitle').textContent = TYPE_CONFIG[type].editTitle;
   document.getElementById('addSuccessMsg').textContent = '';
   goToPage('add');
 }
 function cancelEdit(){
+  const wasType = editingType || entryType;
   editingId = null;
+  editingType = null;
   document.getElementById('addForm').reset();
   document.getElementById('fDate').value = selectedDate;
-  document.getElementById('submitFormBtn').textContent = 'Add expense';
   document.getElementById('cancelEditBtn').style.display = 'none';
-  document.getElementById('addFormTitle').textContent = 'Add an expense';
+  applyEntryType(wasType);
 }
+
+document.querySelectorAll('.type-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(editingId){
+      // Switching type mid-edit would be ambiguous, so drop out of edit mode first.
+      editingId = null; editingType = null;
+      document.getElementById('cancelEditBtn').style.display = 'none';
+      document.getElementById('addForm').reset();
+      document.getElementById('fDate').value = selectedDate;
+    }
+    applyEntryType(btn.dataset.type);
+  });
+});
 
 document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
 
 document.getElementById('addForDayBtn').addEventListener('click', ()=>{
   cancelEdit();
+  applyEntryType('expense');
   document.getElementById('fDate').value = selectedDate;
   goToPage('add');
+});
+
+document.querySelectorAll('[data-addtype]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    cancelEdit();
+    applyEntryType(btn.getAttribute('data-addtype'));
+    goToPage('add');
+  });
 });
 
 document.getElementById('addForm').addEventListener('submit', (e)=>{
   e.preventDefault();
   const date = document.getElementById('fDate').value;
   const amount = document.getElementById('fAmount').value;
-  const category = document.getElementById('fCategory').value;
+  const choice = document.getElementById('fCategory').value;
   const description = document.getElementById('fDesc').value.trim();
   if(!date || !amount || !description) return;
 
   const wasEditing = !!editingId;
+  const type = wasEditing ? editingType : entryType;
 
   if(wasEditing){
-    updateExpense(editingId, date, amount, description, category);
+    if(type==='expense') updateExpense(editingId, date, amount, description, choice);
+    else if(type==='income') updateIncome(editingId, date, amount, choice, description);
+    else updateSaving(editingId, date, amount, choice, description);
     cancelEdit();
   }else{
-    addExpense(date, amount, description, category);
+    if(type==='expense') addExpense(date, amount, description, choice);
+    else if(type==='income') addIncome(date, amount, choice, description);
+    else addSaving(date, amount, choice, description);
   }
 
   selectedDate = date;
@@ -1908,14 +2340,15 @@ document.getElementById('addForm').addEventListener('submit', (e)=>{
   renderAll();
 
   if(wasEditing){
-    goToPage('calendar');
+    goToPage(type==='expense' ? 'calendar' : 'cashflow');
   }else{
     const msg = document.getElementById('addSuccessMsg');
-    msg.textContent = `✓ Added ${formatINR(amount)} · ${description}`;
+    const verb = type==='expense' ? 'Added' : (type==='income' ? 'Logged income' : 'Set aside');
+    msg.textContent = `✓ ${verb} ${formatINR(amount)} · ${description}`;
     document.getElementById('fAmount').value='';
     document.getElementById('fDesc').value='';
     document.getElementById('fAmount').focus();
-    setTimeout(()=>{ if(msg.textContent.startsWith('✓ Added')) msg.textContent=''; }, 4000);
+    setTimeout(()=>{ if(msg.textContent.startsWith('✓ ')) msg.textContent=''; }, 4000);
   }
 });
 
@@ -1925,6 +2358,8 @@ document.getElementById('pulsePrev').addEventListener('click', ()=> navigateMont
 document.getElementById('pulseNext').addEventListener('click', ()=> navigateMonth(1));
 document.getElementById('budgetsPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
 document.getElementById('budgetsNextMonth').addEventListener('click', ()=> navigateMonth(1));
+document.getElementById('cashPrevMonth').addEventListener('click', ()=> navigateMonth(-1));
+document.getElementById('cashNextMonth').addEventListener('click', ()=> navigateMonth(1));
 
 document.getElementById('returnSearchText').addEventListener('input', renderReturns);
 
@@ -2143,6 +2578,9 @@ function applyTheme(theme){
     renderPulse();
     renderCategoryBreakdown();
   }
+  if(document.getElementById('page-cashflow').classList.contains('active')){
+    renderCashflowChart(pulseViewMonth.getFullYear());
+  }
 }
 document.getElementById('themeToggleBtn').addEventListener('click', ()=>{
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
@@ -2180,6 +2618,10 @@ async function init(){
   const cached = loadCache();
   if(cached) state = cached;
   if(!Array.isArray(state.returns)) state.returns = [];
+  if(!Array.isArray(state.income)) state.income = [];
+  if(!Array.isArray(state.savings)) state.savings = [];
+  if(!Array.isArray(state.income_sources) || !state.income_sources.length) state.income_sources = [...DEFAULT_INCOME_SOURCES];
+  if(!Array.isArray(state.savings_destinations) || !state.savings_destinations.length) state.savings_destinations = [...DEFAULT_SAVINGS_DESTINATIONS];
   if(!Array.isArray(state.categories) || !state.categories.length){
     state.categories = DEFAULT_CATEGORIES.map(c=>({...c}));
   }
@@ -2189,6 +2631,7 @@ async function init(){
     setSyncStatus('', 'Not configured');
   }
   renderAll();
+  applyEntryType('expense');
   applyPage(location.hash.replace('#','') || 'dashboard');
 }
 init();
