@@ -315,6 +315,18 @@
   .type-btn:hover{color:var(--text);}
   .type-btn.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,0.12);}
 
+  /* Chart containers: bound the height so charts with maintainAspectRatio:false
+     can't stretch vertically, especially on mobile. */
+  .chart-box{position:relative;width:100%;height:220px;}
+  .chart-box canvas{position:absolute;top:0;left:0;width:100% !important;height:100% !important;}
+  .chart-box-pulse{height:170px;}
+  .chart-box-doughnut{height:220px;}
+  @media (max-width:560px){
+    .chart-box{height:200px;}
+    .chart-box-pulse{height:180px;}
+    .chart-box-doughnut{height:200px;}
+  }
+
   /* Modal */
   .modal-backdrop{
     display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;
@@ -412,7 +424,7 @@
           <button id="pulseNext">›</button>
         </div>
       </div>
-      <canvas id="pulseChart" height="150"></canvas>
+      <div class="chart-box chart-box-pulse"><canvas id="pulseChart"></canvas></div>
       <div style="margin-top:10px;">
         <div class="budget-row">
           <span>Monthly budget</span>
@@ -485,7 +497,7 @@
     <div class="split-row">
       <div class="card">
         <h3>Breakdown by category — <span id="catBreakdownMonthLabel" class="mono">this month</span></h3>
-        <canvas id="catChart" height="200"></canvas>
+        <div class="chart-box chart-box-doughnut"><canvas id="catChart"></canvas></div>
       </div>
       <div class="card">
         <h3>Category totals</h3>
@@ -687,7 +699,7 @@
 
     <div class="card">
       <h3>Year overview — <span id="cashYearLabel" class="mono">—</span></h3>
-      <canvas id="cashflowChart" height="220"></canvas>
+      <div class="chart-box"><canvas id="cashflowChart"></canvas></div>
     </div>
   </section>
 
